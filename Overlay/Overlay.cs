@@ -60,16 +60,20 @@ namespace DvMod.HeadsUpDisplay
         public static Overlay? instance;
         private readonly HudWindow mainWindow = new HudWindow(320);
         private readonly HudWindow graphWindow = new HudWindow(400);
+        private readonly HudWindow metricsWindow = new HudWindow(320, 80);
+        private bool showMetrics, dockMetrics, metricsDetached;
+        private float metricsWidth, metricsBackground, metricsContent;
+        private IReadOnlyList<List<int>> metricColumns = Array.Empty<List<int>>();
         private bool layoutReady, showMain, showGraph, dockGraph, showEvents, compact, drawMetrics, drawCarList;
         private float innerWidth;
         private int fontSize, columns;
         private string identity = "", summary = "";
         private TrainCar? sampledCar;
-        private Rect mainRect, graphRect;
+        private Rect mainRect, graphRect, metricsRect;
         private float background, content, graphBackground, graphContent;
         private bool locked;
-        private string routeActionLabel = "";
-        private Action drawMain = null!, drawGraph = null!, toggleRoute = null!, attachRoute = null!;
+        private string routeActionLabel = "", metricsActionLabel = "";
+        private Action drawMain = null!, drawGraph = null!, toggleRoute = null!, attachRoute = null!, drawMetricContent = null!, toggleMetrics = null!, attachMetrics = null!;
         private readonly List<(string label, string value, float labelWidth, float valueWidth)> metrics =
             new List<(string, string, float, float)>();
         private readonly List<List<int>> metricRows = new List<List<int>>();
@@ -84,6 +88,9 @@ namespace DvMod.HeadsUpDisplay
             drawGraph = RouteMonitor.DrawPassive;
             toggleRoute = ToggleRouteWindow;
             attachRoute = AttachRouteWindow;
+            drawMetricContent = DrawMetrics;
+            toggleMetrics = () => SetMetricsWindow(!Main.settings.layoutSettings.popOutMetrics);
+            attachMetrics = () => SetMetricsWindow(false);
         }
         public void OnGUI()
         {
@@ -92,20 +99,38 @@ namespace DvMod.HeadsUpDisplay
             if (Event.current.type == EventType.Layout) CaptureLayout();
             if (showMain)
             {
-                var allowStart = !showGraph || !graphRect.Contains(Event.current.mousePosition) || mainWindow.OwnsInput;
-                mainWindow.Draw(ref mainRect, identity, background, content, locked, allowStart, drawMain, routeActionLabel, toggleRoute);
+                var allowStart = mainWindow.OwnsInput || ((!showGraph || !graphRect.Contains(Event.current.mousePosition))
+                    && (!showMetrics || !metricsRect.Contains(Event.current.mousePosition)));
+                mainWindow.Draw(ref mainRect, identity, background, content, locked, allowStart, drawMain, routeActionLabel, toggleRoute, metricsActionLabel, toggleMetrics);
                 Main.settings.hudPosition = mainRect.position;
-                if (compact) Main.settings.compactSize = mainRect.size;
+                if (metricsDetached) Main.settings.detailsSize = mainRect.size;
+                else if (compact) Main.settings.compactSize = mainRect.size;
                 else Main.settings.hudSize = mainRect.size;
             }
             else mainWindow.Release();
             if (showGraph)
             {
-                graphWindow.Draw(ref graphRect, "Track ahead", graphBackground, graphContent, locked, true, drawGraph, "Attach", attachRoute);
+                graphWindow.Draw(ref graphRect, "Track ahead", graphBackground, graphContent, locked,
+                    !showMetrics || !metricsRect.Contains(Event.current.mousePosition) || graphWindow.OwnsInput, drawGraph, "Attach", attachRoute);
                 Main.settings.graphPosition = graphRect.position;
                 Main.settings.graphSize = graphRect.size;
             }
             else graphWindow.Release();
+            if (showMetrics)
+            {
+                metricsWindow.Draw(ref metricsRect, compact ? "Metrics · columns" : "Metrics · tape", metricsBackground,
+                    metricsContent, locked, true, drawMetricContent, "Attach", attachMetrics);
+                Main.settings.metricsPosition = metricsRect.position;
+                Main.settings.metricsSize = metricsRect.size;
+            }
+            else metricsWindow.Release();
+        }
+        private static void SetMetricsWindow(bool detached)
+        {
+            Main.settings.layoutSettings.popOutMetrics = detached;
+            Main.settings.layoutSettings.showMetricsWindow = true;
+            if (!detached) Main.settings.layoutSettings.showHud = true;
+            Main.RequestSettingsSave();
         }
         private static void ToggleRouteWindow() => SetRouteWindow(!Main.settings.layoutSettings.popOutGraph);
         private static void AttachRouteWindow() => SetRouteWindow(false);
@@ -128,8 +153,10 @@ namespace DvMod.HeadsUpDisplay
             var layout = settings.layoutSettings;
             compact = layout.displayMode == Settings.LayoutSettings.DisplayMode.Compact;
             columns = layout.columns;
-            mainRect = mainWindow.Clamp(new Rect(settings.hudPosition, compact ? settings.compactSize : settings.hudSize));
+            metricsDetached = layout.popOutMetrics;
+            mainRect = mainWindow.Clamp(new Rect(settings.hudPosition, metricsDetached ? settings.detailsSize : compact ? settings.compactSize : settings.hudSize));
             graphRect = graphWindow.Clamp(new Rect(settings.graphPosition, settings.graphSize));
+            metricsRect = metricsWindow.Clamp(new Rect(settings.metricsPosition, settings.metricsSize));
             if (settings.placeHudTopRight)
             {
                 mainRect = mainWindow.TopRight(mainRect);
@@ -146,11 +173,24 @@ namespace DvMod.HeadsUpDisplay
                 settings.placeGraphTopRight = false;
                 Main.RequestSettingsSave();
             }
+            if (settings.placeMetricsTopRight && layout.popOutMetrics)
+            {
+                metricsRect = metricsWindow.TopRight(metricsRect);
+                // Keep existing window headers reachable when opening the third section.
+                metricsRect.y = Mathf.Max(10, Mathf.Min((layout.popOutGraph ? graphRect.yMax : mainRect.yMax) + 10,
+                    Screen.height - metricsRect.height - 10));
+                metricsRect = metricsWindow.Clamp(metricsRect);
+                settings.metricsPosition = metricsRect.position;
+                settings.placeMetricsTopRight = false;
+                Main.RequestSettingsSave();
+            }
             innerWidth = Math.Max(1, mainRect.width - 38);
+            metricsWidth = Math.Max(1, (layout.popOutMetrics ? metricsRect.width : mainRect.width) - 38);
             fontSize = layout.fontSize;
             Styles.SetFontSize(fontSize);
             background = layout.backgroundOpacity; content = layout.contentOpacity;
             graphBackground = layout.graphBackgroundOpacity; graphContent = layout.graphContentOpacity;
+            metricsBackground = layout.metricsBackgroundOpacity; metricsContent = layout.metricsContentOpacity;
             locked = settings.lockPosition;
             RouteMonitor.PlotBackgroundOpacity = layout.popOutGraph ? graphBackground : background;
             showMain = layout.showHud;
@@ -160,8 +200,11 @@ namespace DvMod.HeadsUpDisplay
                 && layout.routeDisplay != Settings.LayoutSettings.RouteDisplay.EventList;
             showEvents = settings.trackInfoSettings.enabled && layout.routeDisplay != Settings.LayoutSettings.RouteDisplay.Graph;
             drawMetrics = settings.drivingInfoSettings.enabled;
+            showMetrics = drawMetrics && layout.popOutMetrics && layout.showMetricsWindow;
+            dockMetrics = drawMetrics && !layout.popOutMetrics;
+            metricsActionLabel = drawMetrics ? (layout.popOutMetrics ? "Attach metrics" : "Detach metrics") : "";
             sampledCar = PlayerManager.Car ? PlayerManager.Car : PlayerManager.LastLoco;
-            identity = (compact ? "HUD" : "DRIVING") + (sampledCar != null ? $"  {sampledCar.ID}  {sampledCar.carType}" : "  No locomotive selected");
+            identity = (metricsDetached && layout.popOutGraph ? "DETAILS" : compact ? "HUD" : "DRIVING") + (sampledCar != null ? $"  {sampledCar.ID}  {sampledCar.carType}" : "  No locomotive selected");
             CopyTrainSettings();
             summary = BuildTrainSummary();
             if (dockGraph || showGraph)
@@ -180,11 +223,14 @@ namespace DvMod.HeadsUpDisplay
                     if (sampledCar != null && provider.TryGetFormatted(sampledCar, out var formatted) && !string.IsNullOrEmpty(formatted)) value = formatted;
                     metrics.Add((provider.Label, value, Styles.TextWidth(provider.Label, Styles.noWrap), Styles.TextWidth(value, Styles.noWrapBold)));
                 }
+            var assignments = settings.drivingInfoSettings.OrderedProviders()
+                .Select(p => settings.drivingInfoSettings.GetProviderSettings(p).column).ToArray();
+            metricColumns = MetricColumns.Arrange(assignments, columns);
             var used = 0f;
             for (var index = 0; index < metrics.Count; index++)
             {
-                var cellWidth = compact ? innerWidth / columns : Mathf.Min(innerWidth, metrics[index].labelWidth + 5 + metrics[index].valueWidth);
-                if (metricRows.Count == 0 || (compact ? metricRows[metricRows.Count - 1].Count == columns : used + ColumnSpacing + cellWidth > innerWidth))
+                var cellWidth = Mathf.Min(metricsWidth, metrics[index].labelWidth + 5 + metrics[index].valueWidth);
+                if (metricRows.Count == 0 || used + ColumnSpacing + cellWidth > metricsWidth)
                 { metricRows.Add(new List<int>()); used = 0; }
                 metricRows[metricRows.Count - 1].Add(index);
                 used += (used > 0 ? ColumnSpacing : 0) + cellWidth;
@@ -193,7 +239,7 @@ namespace DvMod.HeadsUpDisplay
         }
         private void DrawMainContent()
         {
-            if (drawMetrics) DrawMetrics();
+            if (dockMetrics) DrawMetrics();
             if (dockGraph) { GUILayout.Space(4); RouteMonitor.DrawPassive(); }
             if (showEvents) DrawEvents();
             if (summary.Length > 0) { GUILayout.Space(4); GUILayout.Label(summary, Styles.noWrap, GUILayout.Width(innerWidth)); }
@@ -206,24 +252,40 @@ namespace DvMod.HeadsUpDisplay
         }
         private void DrawMetrics()
         {
-            foreach (var row in metricRows)
+            if (compact)
             {
-                GUILayout.BeginHorizontal(GUILayout.Width(innerWidth));
-                foreach (var index in row)
+                var columnWidth = Mathf.Max(1, (metricsWidth - (columns - 1) * ColumnSpacing) / columns);
+                GUILayout.BeginHorizontal(GUILayout.Width(metricsWidth));
+                for (var c = 0; c < metricColumns.Count; c++)
                 {
-                    if (index != row[0]) GUILayout.Space(ColumnSpacing);
-                    var metric = metrics[index];
-                    var cellWidth = compact ? (innerWidth - (columns - 1) * ColumnSpacing) / columns : innerWidth;
-                    var valueWidth = Mathf.Min(metric.valueWidth, Mathf.Max(1, cellWidth - 6));
-                    var labelWidth = Mathf.Min(metric.labelWidth, Mathf.Max(1, cellWidth - valueWidth - 5));
-                    GUILayout.BeginHorizontal(GUILayout.Width(compact ? cellWidth : labelWidth + 5 + valueWidth));
-                    GUILayout.Label(metric.label, Styles.noWrap, GUILayout.Width(labelWidth));
-                    if (compact) GUILayout.FlexibleSpace(); else GUILayout.Space(5);
-                    GUILayout.Label(metric.value, Styles.noWrapBold, GUILayout.Width(valueWidth));
-                    GUILayout.EndHorizontal();
+                    if (c > 0) GUILayout.Space(ColumnSpacing);
+                    GUILayout.BeginVertical(GUILayout.Width(columnWidth));
+                    foreach (var index in metricColumns[c]) DrawMetric(index, columnWidth, true);
+                    GUILayout.EndVertical();
                 }
                 GUILayout.EndHorizontal();
             }
+            else foreach (var row in metricRows)
+            {
+                GUILayout.BeginHorizontal(GUILayout.Width(metricsWidth));
+                foreach (var index in row)
+                {
+                    if (index != row[0]) GUILayout.Space(ColumnSpacing);
+                    DrawMetric(index, Mathf.Min(metricsWidth, metrics[index].labelWidth + 5 + metrics[index].valueWidth), false);
+                }
+                GUILayout.EndHorizontal();
+            }
+        }
+        private void DrawMetric(int index, float cellWidth, bool column)
+        {
+            var metric = metrics[index];
+            var valueWidth = Mathf.Min(metric.valueWidth, Mathf.Max(1, cellWidth - 6));
+            var labelWidth = Mathf.Min(metric.labelWidth, Mathf.Max(1, cellWidth - valueWidth - 5));
+            GUILayout.BeginHorizontal(GUILayout.Width(cellWidth));
+            GUILayout.Label(metric.label, Styles.noWrap, GUILayout.Width(labelWidth));
+            if (column) GUILayout.FlexibleSpace(); else GUILayout.Space(5);
+            GUILayout.Label(metric.value, Styles.noWrapBold, GUILayout.Width(valueWidth));
+            GUILayout.EndHorizontal();
         }
         private void DrawEvents()
         {
@@ -275,7 +337,7 @@ namespace DvMod.HeadsUpDisplay
             GUILayout.EndVertical();
         }
         public void ResetPosition() { Release(); layoutReady = false; }
-        private void Release() { mainWindow.Release(); graphWindow.Release(); }
+        private void Release() { mainWindow.Release(); graphWindow.Release(); metricsWindow.Release(); }
         public void OnDisable() { Release(); layoutReady = false; if (instance == this) instance = null; }
         public void OnApplicationQuit() => Main.SavePendingSettings();
     }

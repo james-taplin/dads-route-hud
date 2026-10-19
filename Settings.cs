@@ -15,11 +15,14 @@ namespace DvMod.HeadsUpDisplay
             public HashSet<string> disabledProviders = new HashSet<string>(Registry.providers.Keys);
             public List<ProviderSettings> providerSettings = new List<ProviderSettings>();
 
-            private (int providerIndex, bool moveUp)? orderChange = null;
+            private (int providerIndex, int targetIndex)? orderChange = null;
+            private int selectedColumn;
             private string search = "";
             private int selectedGroup;
             private readonly List<(ProviderSettings settings, int index)> visibleProviderSettings = new List<(ProviderSettings, int)>();
 
+            private static readonly string[] ColumnChoices = { "Auto", "1", "2", "3", "4", "5", "6", "7", "8" };
+            private static readonly string[] ColumnFilters = { "All columns", "Auto", "1", "2", "3", "4", "5", "6", "7", "8" };
             private static readonly string[] Groups = { "All", "Controls", "Steam", "Performance", "Vehicle", "Native ports" };
             private static readonly HashSet<string> ControlLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
@@ -55,6 +58,7 @@ namespace DvMod.HeadsUpDisplay
                 public string providerLabel = "";
                 public string unitSymbol = "";
                 public int precision;
+                public int column; // 0 = automatic; 1-8 = chosen column, retained when column count shrinks.
 
                 public override string ToString() => $"{providerLabel}: {unitSymbol}, {precision}";
 
@@ -90,18 +94,29 @@ namespace DvMod.HeadsUpDisplay
             {
                 GUILayout.BeginVertical(GUILayout.Width(30));
 
-                GUI.enabled = providerIndex > 0;
+                var upTarget = MoveTarget(providerIndex, -1);
+                var downTarget = MoveTarget(providerIndex, 1);
+                GUI.enabled = upTarget >= 0;
                 var upPressed = GUILayout.Button("^");//, GUILayout.Width(30), GUILayout.ExpandWidth(false));
-                GUI.enabled = providerIndex + 1 < providerSettings.Count;
+                GUI.enabled = downTarget >= 0;
                 var downPressed = GUILayout.Button("v");//, GUILayout.Width(30), GUILayout.ExpandWidth(false));
                 GUI.enabled = true;
 
                 if (upPressed)
-                    orderChange = (providerIndex, moveUp: true);
+                    orderChange = (providerIndex, upTarget);
                 if (downPressed)
-                    orderChange = (providerIndex, moveUp: false);
+                    orderChange = (providerIndex, downTarget);
 
                 GUILayout.EndVertical();
+            }
+
+            private int MoveTarget(int index, int direction)
+            {
+                var column = providerSettings[index].column;
+                for (var next = index + direction; next >= 0 && next < providerSettings.Count; next += direction)
+                    if (providerSettings[next].column == column
+                        && Registry.providers.TryGetValue(providerSettings[next].providerLabel, out var provider) && !provider.Hidden) return next;
+                return -1;
             }
 
             private void DrawPrecisionSettings(ProviderSettings settings)
@@ -165,6 +180,10 @@ namespace DvMod.HeadsUpDisplay
                 }
 
                 GUILayout.EndHorizontal();
+                GUILayout.BeginHorizontal();
+                GUILayout.Label("Column", GUILayout.Width(55));
+                settings.column = GUILayout.Toolbar(Mathf.Clamp(settings.column, 0, 8), ColumnChoices);
+                GUILayout.EndHorizontal();
                 GUILayout.EndVertical();
 
                 GUILayout.EndHorizontal();
@@ -182,7 +201,8 @@ namespace DvMod.HeadsUpDisplay
                     foreach (var (settings, index) in providerSettings.Select((x, i) => (x, i)))
                     {
                         var label = settings.providerLabel;
-                        if (label.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 && MatchesGroup(label))
+                        if (label.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 && MatchesGroup(label)
+                            && (selectedColumn == 0 || settings.column == selectedColumn - 1))
                             visibleProviderSettings.Add((settings, index));
                     }
                 }
@@ -195,7 +215,7 @@ namespace DvMod.HeadsUpDisplay
                     var index = orderChange.Value.providerIndex;
                     var settings = providerSettings[index];
                     providerSettings.RemoveAt(index);
-                    providerSettings.Insert(index + (orderChange.Value.moveUp ? -1 : 1), settings);
+                    providerSettings.Insert(orderChange.Value.targetIndex, settings);
                 }
             }
 
@@ -230,6 +250,7 @@ namespace DvMod.HeadsUpDisplay
                         search = "";
                     GUILayout.EndHorizontal();
                     selectedGroup = GUILayout.SelectionGrid(selectedGroup, Groups, Groups.Length);
+                    selectedColumn = GUILayout.Toolbar(selectedColumn, ColumnFilters);
                     DrawProviderSettings();
                 }
                 GUILayout.EndVertical();
@@ -369,6 +390,10 @@ namespace DvMod.HeadsUpDisplay
             public RouteDisplay routeDisplay = RouteDisplay.Graph;
             public bool showHud = true;
             public bool popOutGraph;
+            public bool popOutMetrics;
+            public bool showMetricsWindow = true;
+            public float metricsBackgroundOpacity = 0.72f;
+            public float metricsContentOpacity = 1f;
             public bool showGraphWindow = true;
             public float contentOpacity = 1f;
             public float graphBackgroundOpacity = 0.72f;
@@ -404,6 +429,10 @@ namespace DvMod.HeadsUpDisplay
         public Vector2 compactSize = new Vector2(520, 480);
         public Vector2 graphPosition = new Vector2(40, 520);
         public Vector2 graphSize = new Vector2(1100, 360);
+        public Vector2 metricsPosition = new Vector2(40, 40);
+        public Vector2 metricsSize = new Vector2(1020, 140);
+        public Vector2 detailsSize = new Vector2(520, 480);
+        public bool placeMetricsTopRight = true;
         public bool drivingDefaultsApplied;
 
         public DrivingInfoSettings drivingInfoSettings = new DrivingInfoSettings();
@@ -432,7 +461,30 @@ namespace DvMod.HeadsUpDisplay
             GUILayout.BeginVertical("box");
             layoutSettings.showHud = GUILayout.Toggle(layoutSettings.showHud, "Show HUD window");
             layoutSettings.displayMode = (LayoutSettings.DisplayMode)GUILayout.Toolbar((int)layoutSettings.displayMode, new[] { "Driving strip", "Compact columns" });
-            UnityModManager.UI.DrawIntField(ref layoutSettings.columns, "Compact metric columns (1-4)");
+            UnityModManager.UI.DrawIntField(ref layoutSettings.columns, "Metric columns (1-8)");
+            GUILayout.Label("Assign each metric to Auto or a numbered column below. The existing up/down buttons set reading order within its column. Reducing the column count temporarily folds higher assignments into the last visible column; increasing it restores them.");
+            if (GUILayout.Button("Separate all three sections", GUILayout.ExpandWidth(false)))
+            {
+                layoutSettings.popOutMetrics = layoutSettings.popOutGraph = true;
+                layoutSettings.showMetricsWindow = layoutSettings.showGraphWindow = layoutSettings.showHud = true;
+                layoutSettings.routeDisplay = LayoutSettings.RouteDisplay.GraphAndEvents;
+                drivingInfoSettings.enabled = trackInfoSettings.enabled = true;
+                Main.RequestSettingsSave();
+            }
+            layoutSettings.popOutMetrics = GUILayout.Toolbar(layoutSettings.popOutMetrics ? 1 : 0,
+                new[] { "Metrics attached", "Metrics in own window" }) == 1;
+            if (layoutSettings.popOutMetrics)
+            {
+                layoutSettings.showMetricsWindow = GUILayout.Toggle(layoutSettings.showMetricsWindow, "Show metrics window");
+                WindowSize("Metrics window", ref metricsSize, 80);
+                Opacity("Metrics background", ref layoutSettings.metricsBackgroundOpacity);
+                Opacity("Metrics text", ref layoutSettings.metricsContentOpacity);
+            }
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button("Top tape", GUILayout.ExpandWidth(false))) PlaceMetricsTape(false);
+            if (GUILayout.Button("Bottom tape", GUILayout.ExpandWidth(false))) PlaceMetricsTape(true);
+            GUILayout.EndHorizontal();
+            GUILayout.Label("For a top/bottom tape, choose Driving strip, detach metrics and resize that window wide and shallow. Detach the route graph too to leave route events and train details in the main window.");
             layoutSettings.routeDisplay = (LayoutSettings.RouteDisplay)GUILayout.Toolbar((int)layoutSettings.routeDisplay, new[] { "Route graph", "Route event list", "Graph + events" });
             GUILayout.Label("Route window");
             layoutSettings.popOutGraph = GUILayout.Toolbar(layoutSettings.popOutGraph ? 1 : 0,
@@ -441,7 +493,8 @@ namespace DvMod.HeadsUpDisplay
             if (layoutSettings.popOutGraph)
                 layoutSettings.showGraphWindow = GUILayout.Toggle(layoutSettings.showGraphWindow, "Show separate route window");
             UnityModManager.UI.DrawIntField(ref layoutSettings.fontSize, "Font size (10-28)");
-            if (layoutSettings.displayMode == LayoutSettings.DisplayMode.Compact) WindowSize("Compact HUD", ref compactSize);
+            if (layoutSettings.popOutMetrics) WindowSize("Route list / train details", ref detailsSize);
+            else if (layoutSettings.displayMode == LayoutSettings.DisplayMode.Compact) WindowSize("Compact HUD", ref compactSize);
             else WindowSize("Driving strip", ref hudSize);
             if (layoutSettings.popOutGraph) WindowSize("Separate route window", ref graphSize);
             UnityModManager.UI.DrawIntField(ref layoutSettings.nearDistance, "Optional close-up range, metres (250-10000)");
@@ -451,7 +504,7 @@ namespace DvMod.HeadsUpDisplay
             Opacity("Separate route background", ref layoutSettings.graphBackgroundOpacity);
             Opacity("Separate route text and graphics", ref layoutSettings.graphContentOpacity);
             GUILayout.Label("Windows are independent of Mod Toolbar. With the game cursor available, drag a header or its bottom-right resize grip. Lock geometry below when finished. Scroll to see all content in smaller windows.");
-            if (GUILayout.Button("Reset both window positions and sizes", GUILayout.ExpandWidth(false))) ResetWindows();
+            if (GUILayout.Button("Reset all window positions and sizes", GUILayout.ExpandWidth(false))) ResetWindows();
             layoutSettings.showRouteStatus = GUILayout.Toggle(layoutSettings.showRouteStatus, "Route status and coverage");
             layoutSettings.showNearProfile = GUILayout.Toggle(layoutSettings.showNearProfile, "Also show a close-up of the first few kilometres");
             layoutSettings.showOverview = GUILayout.Toggle(layoutSettings.showOverview, "Continuous full-range track-ahead graph");
@@ -490,23 +543,37 @@ namespace DvMod.HeadsUpDisplay
             GUILayout.EndHorizontal();
         }
 
-        private static void WindowSize(string label, ref Vector2 value)
+        private static void WindowSize(string label, ref Vector2 value, int minimumHeight = 120)
         {
             var width = Mathf.RoundToInt(value.x);
             var height = Mathf.RoundToInt(value.y);
             UnityModManager.UI.DrawIntField(ref width, label + " width (pixels)");
             UnityModManager.UI.DrawIntField(ref height, label + " height (pixels)");
-            value = new Vector2(Mathf.Clamp(width, 320, 16384), Mathf.Clamp(height, 120, 16384));
+            value = new Vector2(Mathf.Clamp(width, 320, 16384), Mathf.Clamp(height, minimumHeight, 16384));
+        }
+
+        private void PlaceMetricsTape(bool bottom)
+        {
+            layoutSettings.displayMode = LayoutSettings.DisplayMode.DrivingStrip;
+            layoutSettings.popOutMetrics = layoutSettings.showMetricsWindow = true;
+            drivingInfoSettings.enabled = true;
+            metricsSize = new Vector2(Mathf.Max(1, Screen.width - 20), Mathf.Max(80, layoutSettings.fontSize * 2 + 60));
+            metricsPosition = new Vector2(10, bottom ? Mathf.Max(10, Screen.height - metricsSize.y - 10) : 10);
+            placeMetricsTopRight = false;
+            Main.RequestSettingsSave();
         }
 
         public void ResetWindows()
         {
             hudPosition = defaultPosition;
-            placeHudTopRight = placeGraphTopRight = true;
+            placeHudTopRight = placeGraphTopRight = placeMetricsTopRight = true;
             hudSize = new Vector2(1020, 480);
             compactSize = new Vector2(520, 480);
             graphPosition = new Vector2(40, 520);
             graphSize = new Vector2(1100, 360);
+            metricsPosition = new Vector2(40, 40);
+            metricsSize = new Vector2(1020, 140);
+            detailsSize = new Vector2(520, 480);
             Overlay.instance?.ResetPosition();
         }
 
@@ -532,7 +599,7 @@ namespace DvMod.HeadsUpDisplay
         public void ClampLayout()
         {
             layoutSettings.fontSize = Mathf.Clamp(layoutSettings.fontSize, 10, 28);
-            layoutSettings.columns = Mathf.Clamp(layoutSettings.columns, 1, 4);
+            layoutSettings.columns = Mathf.Clamp(layoutSettings.columns, 1, 8);
             layoutSettings.stripWidth = Mathf.Clamp(layoutSettings.stripWidth, 400, 1800);
             layoutSettings.nearDistance = Mathf.Clamp(layoutSettings.nearDistance, 250, 10000);
             layoutSettings.inspectorPageSize = Mathf.Clamp(layoutSettings.inspectorPageSize, 10, 100);
@@ -543,6 +610,8 @@ namespace DvMod.HeadsUpDisplay
             layoutSettings.contentOpacity = Mathf.Clamp01(layoutSettings.contentOpacity);
             layoutSettings.graphBackgroundOpacity = Mathf.Clamp01(layoutSettings.graphBackgroundOpacity);
             layoutSettings.graphContentOpacity = Mathf.Clamp01(layoutSettings.graphContentOpacity);
+            layoutSettings.metricsBackgroundOpacity = Mathf.Clamp01(layoutSettings.metricsBackgroundOpacity);
+            layoutSettings.metricsContentOpacity = Mathf.Clamp01(layoutSettings.metricsContentOpacity);
             trackInfoSettings.maxEventCount = Mathf.Clamp(trackInfoSettings.maxEventCount, 1, 30);
             trackInfoSettings.maxEventSpan = double.IsNaN(trackInfoSettings.maxEventSpan) || double.IsInfinity(trackInfoSettings.maxEventSpan)
                 ? 50000 : Math.Min(50000, Math.Max(100, trackInfoSettings.maxEventSpan));

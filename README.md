@@ -29,7 +29,7 @@ The collector reads native geometry and sign metadata without adding sign collid
 
 ## Candidate status
 
-Version **0.2.1** is built and packaged for testing. [The handover](docs/HANDOVER.md) records zero-warning game-reference compilation, 128 route-core checks, 14 conversion checks and 51 metadata-contract checks. These do not establish in-game layout, full-route source coverage or frame timing. Window mouse interaction and visual acceptance remain pending in [VALIDATION.md](docs/VALIDATION.md).
+Version **0.3.0** is built and packaged for testing. [The handover](docs/HANDOVER.md) records zero-warning game-reference compilation, 139 route/layout checks, 14 conversion checks and 51 metadata-contract checks. These do not establish in-game layout, full-route source coverage or frame timing. Window mouse interaction and visual acceptance remain pending in [VALIDATION.md](docs/VALIDATION.md).
 
 The candidate has its own DadsRouteHUD mod ID, DLL and settings. Building and packaging never install it. For a later test installation, select the desired HUD in UMM and restart. Dad's Driving HUD and previous Rinzler files/settings are not migrated or overwritten.
 
@@ -52,7 +52,7 @@ dotnet run --project tests/RouteCore.Tests.csproj --configuration Release
 ./Package.ps1
 ```
 
-Output: artifacts/DadsRouteHUD-0.2.1.zip. QuantitiesNet is built from pinned MIT source. Current game assemblies are local references; game/Unity/UMM/optional DLLs and obsolete upstream lib/ binaries are excluded from packages. [Project context](docs/PROJECT_CONTEXT.md) records architecture and provenance.
+Output: artifacts/DadsRouteHUD-0.3.0.zip. QuantitiesNet is built from pinned MIT source. Current game assemblies are local references; game/Unity/UMM/optional DLLs and obsolete upstream lib/ binaries are excluded from packages. [Project context](docs/PROJECT_CONTEXT.md) records architecture and provenance.
 
 ## Reading the metrics
 
@@ -68,3 +68,12 @@ Retain LICENSE, QuantitiesNet.LICENSE and THIRD_PARTY_NOTICES.txt. This public f
 ## Licence and credits
 
 Dad's Route HUD and its fork additions are distributed under [MIT](LICENSE). Original copyright/permission notices are retained. See [credits](CREDITS.md), [third-party notices](THIRD_PARTY_NOTICES.txt), the separate [QuantitiesNet licence](QuantitiesNet.LICENSE), and the [pinned-source verification](docs/LICENSING.md).
+
+
+## Three independent sections (0.3.0)
+
+In UMM, **Separate all three sections** detaches metrics and the continuous graph, and selects Graph + events. The main window retains the route event list and train details. Each window is independently movable/resizable, with saved geometry. Use Detach metrics / Attach metrics and Detach route / Attach route in the main header, or Attach in each detached header. No Mod Toolbar integration or additional collector is introduced.
+
+Metrics support **1-8 columns**. Each metric has an Auto / 1-8 column selector; filter the settings by column and use its up/down arrows to set reading order among metrics with that saved assignment. Auto preserves the previous row-major placement. Reducing the count folds higher assignments into the last visible column, without changing their saved choices; increasing restores them. Units, precision, selections and prior ordering are retained. Column assignments are ignored by the horizontal tape, which uses the normal provider reading order.
+
+For a tape along the top or bottom, use **Top tape / Bottom tape** in UMM, or select Driving strip and resize the detached metrics window wide and shallow (minimum height 80 px). Its own opacity and visibility controls are in UMM. Attached, detached-metrics and details sizes are saved separately so changing metric style does not resize the detached details window. First-open metrics placement keeps existing headers reachable where screen space permits. All windows scroll overflow rather than dropping selected metrics/events. User input/appearance and persistence across a real game restart remain subject to game acceptance.

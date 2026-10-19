@@ -32,19 +32,19 @@ namespace DvMod.HeadsUpDisplay
         }
 
         public static WindowBounds TopRight(double width, double height, double screenWidth, double screenHeight,
-            double minimumWidth = 320)
+            double minimumWidth = 320, double minimumHeight = 120)
         {
-            var fitted = Clamp(0, 0, width, height, screenWidth, screenHeight, minimumWidth);
+            var fitted = Clamp(0, 0, width, height, screenWidth, screenHeight, minimumWidth, minimumHeight);
             return Clamp(screenWidth - fitted.Width - 10, 10, fitted.Width, fitted.Height,
-                screenWidth, screenHeight, minimumWidth);
+                screenWidth, screenHeight, minimumWidth, minimumHeight);
         }
 
         public static WindowBounds Resize(WindowBounds start, double dx, double dy, double screenWidth,
-            double screenHeight, double minimumWidth = 320)
+            double screenHeight, double minimumWidth = 320, double minimumHeight = 120)
         {
-            var fitted = Clamp(start.X, start.Y, start.Width, start.Height, screenWidth, screenHeight, minimumWidth);
+            var fitted = Clamp(start.X, start.Y, start.Width, start.Height, screenWidth, screenHeight, minimumWidth, minimumHeight);
             return Clamp(fitted.X, fitted.Y, Math.Min(screenWidth - fitted.X, fitted.Width + Finite(dx, 0)),
-                Math.Min(screenHeight - fitted.Y, fitted.Height + Finite(dy, 0)), screenWidth, screenHeight, minimumWidth);
+                Math.Min(screenHeight - fitted.Y, fitted.Height + Finite(dy, 0)), screenWidth, screenHeight, minimumWidth, minimumHeight);
         }
     }
 }

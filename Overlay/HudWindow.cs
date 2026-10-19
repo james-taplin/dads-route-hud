@@ -7,6 +7,7 @@ namespace DvMod.HeadsUpDisplay
     internal sealed class HudWindow
     {
         private readonly float minimumWidth;
+        private readonly float minimumHeight;
         private int control;
         private bool resizing;
         private Vector2 startMouse;
@@ -15,16 +16,16 @@ namespace DvMod.HeadsUpDisplay
         private Vector2 scroll;
         public bool OwnsInput => control != 0 && GUIUtility.hotControl == control;
 
-        public HudWindow(float minimumWidth) { this.minimumWidth = minimumWidth; }
+        public HudWindow(float minimumWidth, float minimumHeight = 120) { this.minimumWidth = minimumWidth; this.minimumHeight = minimumHeight; }
         public Rect Clamp(Rect rect)
         {
             var bounds = WindowGeometry.Clamp(rect.x, rect.y, rect.width, rect.height,
-                Screen.width, Screen.height, minimumWidth);
+                Screen.width, Screen.height, minimumWidth, minimumHeight);
             return new Rect((float)bounds.X, (float)bounds.Y, (float)bounds.Width, (float)bounds.Height);
         }
         public Rect TopRight(Rect rect)
         {
-            var bounds = WindowGeometry.TopRight(rect.width, rect.height, Screen.width, Screen.height, minimumWidth);
+            var bounds = WindowGeometry.TopRight(rect.width, rect.height, Screen.width, Screen.height, minimumWidth, minimumHeight);
             return new Rect((float)bounds.X, (float)bounds.Y, (float)bounds.Width, (float)bounds.Height);
         }
         public void Release()
@@ -33,16 +34,30 @@ namespace DvMod.HeadsUpDisplay
             control = 0;
         }
         public void Draw(ref Rect savedRect, string title, float background, float content,
-            bool locked, bool allowStart, Action drawContent, string actionLabel, Action headerAction)
+            bool locked, bool allowStart, Action drawContent, string actionLabel, Action headerAction, string secondActionLabel = "", Action? secondAction = null)
         {
             savedRect = Clamp(savedRect);
             if (Event.current.type == EventType.Layout) frameRect = savedRect;
+            if (string.IsNullOrEmpty(actionLabel) && !string.IsNullOrEmpty(secondActionLabel))
+            {
+                actionLabel = secondActionLabel; headerAction = secondAction ?? headerAction; secondActionLabel = "";
+            }
             var ev = Event.current;
             var id = GUIUtility.GetControlID(FocusType.Passive);
             var headerHeight = Styles.noWrapBold.fontSize + 14;
+            var secondRow = !string.IsNullOrEmpty(secondActionLabel);
+            var titleHeight = headerHeight;
+            if (secondRow) headerHeight += titleHeight;
             var actionWidth = string.IsNullOrEmpty(actionLabel) ? 0 : Mathf.Min(frameRect.width - 40,
                 Mathf.Max(90, Styles.TextWidth(actionLabel, Styles.noWrapBold) + 20));
             var actionRect = new Rect(frameRect.xMax - actionWidth - 8, frameRect.y + 3, actionWidth, headerHeight - 6);
+            var secondRect = new Rect();
+            if (secondRow)
+            {
+                actionWidth = (frameRect.width - 22) / 2;
+                actionRect = new Rect(frameRect.x + 8, frameRect.y + titleHeight, actionWidth, titleHeight - 4);
+                secondRect = new Rect(actionRect.xMax + 6, actionRect.y, actionWidth, actionRect.height);
+            }
             var mouseFree = Cursor.visible && Cursor.lockState != CursorLockMode.Locked;
             if (locked || !mouseFree) Release();
             else if (ev.type == EventType.MouseDown && ev.button == 0 && GUIUtility.hotControl == 0 && allowStart)
@@ -50,7 +65,7 @@ namespace DvMod.HeadsUpDisplay
                 var grip = new Rect(frameRect.xMax - 20, frameRect.yMax - 20, 20, 20);
                 var header = new Rect(frameRect.x, frameRect.y, frameRect.width, headerHeight);
                 if (grip.Contains(ev.mousePosition) || (header.Contains(ev.mousePosition)
-                    && (actionWidth == 0 || !actionRect.Contains(ev.mousePosition))))
+                    && (actionWidth == 0 || !actionRect.Contains(ev.mousePosition)) && !secondRect.Contains(ev.mousePosition)))
                 {
                     resizing = grip.Contains(ev.mousePosition);
                     startRect = savedRect; startMouse = ev.mousePosition;
@@ -65,7 +80,7 @@ namespace DvMod.HeadsUpDisplay
                     if (resizing)
                     {
                         var resized = WindowGeometry.Resize(new WindowBounds(startRect.x, startRect.y, startRect.width, startRect.height),
-                            delta.x, delta.y, Screen.width, Screen.height, minimumWidth);
+                            delta.x, delta.y, Screen.width, Screen.height, minimumWidth, minimumHeight);
                         savedRect = new Rect((float)resized.X, (float)resized.Y, (float)resized.Width, (float)resized.Height);
                     }
                     else savedRect = Clamp(new Rect(startRect.position + delta, startRect.size));
@@ -83,14 +98,15 @@ namespace DvMod.HeadsUpDisplay
                 GUI.color = new Color(0.025f, 0.035f, 0.045f, background);
                 if (ev.type == EventType.Repaint) GUI.DrawTexture(frameRect, Texture2D.whiteTexture);
                 GUI.color = new Color(1, 1, 1, content);
-                GUI.Label(new Rect(frameRect.x + 10, frameRect.y + 4, Mathf.Max(1, frameRect.width - actionWidth - 28), headerHeight - 4),
+                GUI.Label(new Rect(frameRect.x + 10, frameRect.y + 4, Mathf.Max(1, frameRect.width - (secondRow ? 20 : actionWidth + 28)), titleHeight - 4),
                     title + (locked ? "  [locked]" : "  [drag header]"), Styles.noWrapBold);
                 if (!locked) GUI.Label(new Rect(frameRect.xMax - 19, frameRect.yMax - 21, 19, 20), "↘", Styles.noWrapBold);
                 // The action is outside the scroll view and the drag hit area. Keep it usable when geometry is locked.
                 // Ignore driving input before drawing any interactive controls, then restore it for the game.
                 if (suppressInput) ev.type = EventType.Ignore;
                 GUI.enabled = savedEnabled && mouseFree && (allowStart || OwnsInput);
-                if (actionWidth > 0 && GUI.Button(actionRect, actionLabel)) headerAction();
+                if (!string.IsNullOrEmpty(actionLabel) && GUI.Button(actionRect, actionLabel)) headerAction();
+                if (secondRow && GUI.Button(secondRect, secondActionLabel)) secondAction?.Invoke();
                 GUI.enabled = savedEnabled;
                 var bodyHeight = Mathf.Max(1, frameRect.height - headerHeight - 16);
                 GUILayout.BeginArea(new Rect(frameRect.x + 8, frameRect.y + headerHeight, Mathf.Max(1, frameRect.width - 16), bodyHeight));

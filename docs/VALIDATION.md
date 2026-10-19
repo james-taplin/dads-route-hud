@@ -13,7 +13,7 @@ git diff --check
 ./Package.ps1
 ```
 
-Expect zero build warnings/errors, 14 driving checks, 128 route checks and 51 metadata matches. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave parent source, installed HUD/settings and Params.xml unchanged.
+Expect zero build warnings/errors, 14 driving checks, 139 route/layout checks and 51 metadata matches. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave parent source, installed HUD/settings and Params.xml unchanged.
 
 ## Native route acceptance — pending
 
@@ -58,3 +58,8 @@ The supplied recording shows 79 retained items, then 52 with signals missing for
 Confirm the first upgrade displays one continuous profile/marker row/axis across the selected range (20 km remains 20 km; 50 km remains 50 km). The optional close-up and sectioned atlas start off once; enabling either persists across restarts. Changing presentation must not alter retained IDs/counts, horizon, loop termination or collection source.
 
 With the native free cursor, click Detach route, drag and resize the detached graph, scroll its content and click Attach. Repeat with geometry locked, with graph previously hidden, and with event-list-only selected. Header clicks must not start dragging. Buttons remain outside the scrolled body and actions take effect on the next Layout. Check small/large resolutions and fonts, overlap of both windows, bright signal marker tokens, normal driving keys, locked cursor, and persistence after save/restart. The second window uses the same collector. Confirm all previous metric/range/window choices survive migration.
+
+
+## Three sections and metric columns (0.3.0) - game acceptance pending
+
+The pure suite has 139 checks, including explicit/Auto columns, ordering, empty columns, fold/restore without mutating saved assignments, exact-once retention and shallow tape geometry. In UMM choose Separate all three sections. Verify independent drag/resize, Attach from both detached windows, both main-header actions, overlap/input priority and lock behavior. Set column count 1, 2 and 8, assign and reorder metrics in each, reduce/restore the count, search/filter, and confirm no selection/unit/precision loss. Switch detached metrics between columns and tape: the details window size must stay fixed. Use Top tape / Bottom tape and manually stretch a tape, check scrolling when too short, save/restart, and inspect all three opacities/visibility controls. Route, optional source handling and loop/flicker behavior must remain unchanged with one shared collector.

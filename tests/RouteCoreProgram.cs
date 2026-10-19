@@ -35,8 +35,29 @@ internal static class RouteCoreProgram
         ShiftedViews();
         RestoredAndResizedWindows();
         AtomicDisplayReplacement();
+        ConfigurableMetricColumns();
         SyntheticTiming();
         Console.WriteLine(checks + " route-core checks passed.");
+    }
+
+    private static void ConfigurableMetricColumns()
+    {
+        var auto = MetricColumns.Arrange(new[] { 0, 0, 0, 0, 0 }, 2);
+        Check(auto[0].SequenceEqual(new[] { 0, 2, 4 }) && auto[1].SequenceEqual(new[] { 1, 3 }), "Auto preserves existing row-major placement");
+        var choices = new[] { 2, 1, 2, 8, 0 };
+        var explicitColumns = MetricColumns.Arrange(choices, 8);
+        Check(explicitColumns[1].SequenceEqual(new[] { 0, 2 }) && explicitColumns[0].SequenceEqual(new[] { 1 }), "Chosen columns preserve independent reading order");
+        Check(explicitColumns[7].SequenceEqual(new[] { 3 }) && explicitColumns[4].SequenceEqual(new[] { 4 }), "Explicit and automatic assignments coexist");
+        var folded = MetricColumns.Arrange(choices, 2);
+        Check(folded[1].SequenceEqual(new[] { 0, 2, 3 }), "Reducing columns keeps out-of-range assignments visible in the last column");
+        Check(choices.SequenceEqual(new[] { 2, 1, 2, 8, 0 }) && MetricColumns.Arrange(choices, 8)[7].Contains(3), "Reducing/restoring columns never changes saved choices");
+        Check(MetricColumns.Arrange(choices, 1)[0].SequenceEqual(Enumerable.Range(0, choices.Length)), "One column retains every metric in reading order");
+        Check(folded.SelectMany(c => c).OrderBy(i => i).SequenceEqual(Enumerable.Range(0, choices.Length)), "Every metric appears exactly once");
+        Check(MetricColumns.Arrange(Array.Empty<int>(), 8).Count == 8, "Empty selection and empty columns are supported");
+        Check(MetricColumns.Arrange(new[] { -1, int.MaxValue }, 99).SelectMany(c => c).Count() == 2, "Corrupt assignments/counts remain bounded and retain metrics");
+        var tape = WindowGeometry.Resize(new WindowBounds(10, 10, 500, 140), 2000, -500, 1920, 1080, 320, 80);
+        Check(tape.Height == 80 && tape.Width == 1910 && tape.X == 10, "Metrics can form a shallow full-width anchored tape");
+        Check(WindowGeometry.TopRight(1020, 80, 1920, 1080, 320, 80).Height == 80, "Restoring a metrics tape preserves its shallow height");
     }
 
     private static void BoundaryAndRetention()
