@@ -375,7 +375,7 @@ namespace DvMod.HeadsUpDisplay
             public float graphContentOpacity = 1f;
             public int profileHeight = 50;
             public bool showRouteStatus = true;
-            public bool showNearProfile = true;
+            public bool showNearProfile;
             public bool showOverview = true;
             public bool showNextEvent = true;
             public bool showTracks = true;
@@ -397,6 +397,7 @@ namespace DvMod.HeadsUpDisplay
 
         public LayoutSettings layoutSettings = new LayoutSettings();
         public int windowLayoutVersion;
+        public int routeDisplayVersion;
         public bool placeHudTopRight = true;
         public bool placeGraphTopRight = true;
         public Vector2 hudSize = new Vector2(1020, 480);
@@ -433,14 +434,17 @@ namespace DvMod.HeadsUpDisplay
             layoutSettings.displayMode = (LayoutSettings.DisplayMode)GUILayout.Toolbar((int)layoutSettings.displayMode, new[] { "Driving strip", "Compact columns" });
             UnityModManager.UI.DrawIntField(ref layoutSettings.columns, "Compact metric columns (1-4)");
             layoutSettings.routeDisplay = (LayoutSettings.RouteDisplay)GUILayout.Toolbar((int)layoutSettings.routeDisplay, new[] { "Route graph", "Route event list", "Graph + events" });
-            layoutSettings.popOutGraph = GUILayout.Toggle(layoutSettings.popOutGraph, "Render route graph in a separate window");
+            GUILayout.Label("Route window");
+            layoutSettings.popOutGraph = GUILayout.Toolbar(layoutSettings.popOutGraph ? 1 : 0,
+                new[] { "Attached to HUD", "Detached window" }) == 1;
+            GUILayout.Label("Use Detach route in the HUD header, or Attach in the track-ahead header. These buttons remain above the scrollable content.");
             if (layoutSettings.popOutGraph)
                 layoutSettings.showGraphWindow = GUILayout.Toggle(layoutSettings.showGraphWindow, "Show separate route window");
             UnityModManager.UI.DrawIntField(ref layoutSettings.fontSize, "Font size (10-28)");
             if (layoutSettings.displayMode == LayoutSettings.DisplayMode.Compact) WindowSize("Compact HUD", ref compactSize);
             else WindowSize("Driving strip", ref hudSize);
             if (layoutSettings.popOutGraph) WindowSize("Separate route window", ref graphSize);
-            UnityModManager.UI.DrawIntField(ref layoutSettings.nearDistance, "Near view metres (250-10000)");
+            UnityModManager.UI.DrawIntField(ref layoutSettings.nearDistance, "Optional close-up range, metres (250-10000)");
             UnityModManager.UI.DrawIntField(ref layoutSettings.profileHeight, "Grade profile height (20-300)");
             Opacity("HUD background", ref layoutSettings.backgroundOpacity);
             Opacity("HUD text and graphics", ref layoutSettings.contentOpacity);
@@ -449,10 +453,11 @@ namespace DvMod.HeadsUpDisplay
             GUILayout.Label("Windows are independent of Mod Toolbar. With the game cursor available, drag a header or its bottom-right resize grip. Lock geometry below when finished. Scroll to see all content in smaller windows.");
             if (GUILayout.Button("Reset both window positions and sizes", GUILayout.ExpandWidth(false))) ResetWindows();
             layoutSettings.showRouteStatus = GUILayout.Toggle(layoutSettings.showRouteStatus, "Route status and coverage");
-            layoutSettings.showNearProfile = GUILayout.Toggle(layoutSettings.showNearProfile, "Near grade profile");
-            layoutSettings.showOverview = GUILayout.Toggle(layoutSettings.showOverview, "Full-range overview");
+            layoutSettings.showNearProfile = GUILayout.Toggle(layoutSettings.showNearProfile, "Also show a close-up of the first few kilometres");
+            layoutSettings.showOverview = GUILayout.Toggle(layoutSettings.showOverview, "Continuous full-range track-ahead graph");
             layoutSettings.showNextEvent = GUILayout.Toggle(layoutSettings.showNextEvent, "Next event summary");
-            layoutSettings.expandedAtlas = GUILayout.Toggle(layoutSettings.expandedAtlas, "Expand the passive route atlas");
+            layoutSettings.expandedAtlas = GUILayout.Toggle(layoutSettings.expandedAtlas, "Also show five range sections (optional atlas)");
+            GUILayout.Label("The full-range graph already covers the entire look-ahead. Close-up and sectioned atlas repeat the same data; they do not extend collection.");
             layoutSettings.inspectEveryEvent = GUILayout.Toggle(layoutSettings.inspectEveryEvent, "Inspect every retained route event here");
             GUILayout.Label("Displayed event types (collection and the complete inspector retain everything)");
             layoutSettings.showTracks = GUILayout.Toggle(layoutSettings.showTracks, "Track entries");
@@ -503,6 +508,17 @@ namespace DvMod.HeadsUpDisplay
             graphPosition = new Vector2(40, 520);
             graphSize = new Vector2(1100, 360);
             Overlay.instance?.ResetPosition();
+        }
+
+        public bool MigrateRouteDisplay()
+        {
+            if (routeDisplayVersion >= 1) return false;
+            // Replace the formerly duplicated near/full/atlas default once; preserve range, geometry and metrics.
+            layoutSettings.showOverview = true;
+            layoutSettings.showNearProfile = false;
+            layoutSettings.expandedAtlas = false;
+            routeDisplayVersion = 1;
+            return true;
         }
 
         public void MigrateWindows()

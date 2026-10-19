@@ -68,7 +68,8 @@ namespace DvMod.HeadsUpDisplay
         private Rect mainRect, graphRect;
         private float background, content, graphBackground, graphContent;
         private bool locked;
-        private Action drawMain = null!, drawGraph = null!;
+        private string routeActionLabel = "";
+        private Action drawMain = null!, drawGraph = null!, toggleRoute = null!, attachRoute = null!;
         private readonly List<(string label, string value, float labelWidth, float valueWidth)> metrics =
             new List<(string, string, float, float)>();
         private readonly List<List<int>> metricRows = new List<List<int>>();
@@ -81,6 +82,8 @@ namespace DvMod.HeadsUpDisplay
             instance = this;
             drawMain = DrawMainContent;
             drawGraph = RouteMonitor.DrawPassive;
+            toggleRoute = ToggleRouteWindow;
+            attachRoute = AttachRouteWindow;
         }
         public void OnGUI()
         {
@@ -90,7 +93,7 @@ namespace DvMod.HeadsUpDisplay
             if (showMain)
             {
                 var allowStart = !showGraph || !graphRect.Contains(Event.current.mousePosition) || mainWindow.OwnsInput;
-                mainWindow.Draw(ref mainRect, identity, background, content, locked, allowStart, drawMain);
+                mainWindow.Draw(ref mainRect, identity, background, content, locked, allowStart, drawMain, routeActionLabel, toggleRoute);
                 Main.settings.hudPosition = mainRect.position;
                 if (compact) Main.settings.compactSize = mainRect.size;
                 else Main.settings.hudSize = mainRect.size;
@@ -98,11 +101,25 @@ namespace DvMod.HeadsUpDisplay
             else mainWindow.Release();
             if (showGraph)
             {
-                graphWindow.Draw(ref graphRect, "Route atlas", graphBackground, graphContent, locked, true, drawGraph);
+                graphWindow.Draw(ref graphRect, "Track ahead", graphBackground, graphContent, locked, true, drawGraph, "Attach", attachRoute);
                 Main.settings.graphPosition = graphRect.position;
                 Main.settings.graphSize = graphRect.size;
             }
             else graphWindow.Release();
+        }
+        private static void ToggleRouteWindow() => SetRouteWindow(!Main.settings.layoutSettings.popOutGraph);
+        private static void AttachRouteWindow() => SetRouteWindow(false);
+        private static void SetRouteWindow(bool detached)
+        {
+            var layout = Main.settings.layoutSettings;
+            layout.popOutGraph = detached;
+            layout.showGraphWindow = true;
+            // An explicit graph action makes the graph visible even after selecting event-list-only mode.
+            if (layout.routeDisplay == Settings.LayoutSettings.RouteDisplay.EventList)
+                layout.routeDisplay = Settings.LayoutSettings.RouteDisplay.GraphAndEvents;
+            if (!detached) layout.showHud = true;
+            Main.RequestSettingsSave();
+            // Visibility/content changes are applied at the next Layout, never mid-event.
         }
         private void CaptureLayout()
         {
@@ -137,6 +154,7 @@ namespace DvMod.HeadsUpDisplay
             locked = settings.lockPosition;
             RouteMonitor.PlotBackgroundOpacity = layout.popOutGraph ? graphBackground : background;
             showMain = layout.showHud;
+            routeActionLabel = !settings.trackInfoSettings.enabled ? "" : layout.popOutGraph ? "Attach route" : "Detach route";
             showGraph = settings.trackInfoSettings.enabled && layout.popOutGraph && layout.showGraphWindow;
             dockGraph = settings.trackInfoSettings.enabled && !layout.popOutGraph
                 && layout.routeDisplay != Settings.LayoutSettings.RouteDisplay.EventList;

@@ -5,7 +5,8 @@ One HUD with compact columns or a horizontal driving strip, selected in UMM. Bot
 ## UMM controls and independent windows
 
 - Choose Driving strip or Compact columns; choose Route graph, Route event list, or Graph + events.
-- Toggle the separate route graph window, its visibility, near range, collection range (100–50,000 m), profile height, overview, next-event line and expanded atlas.
+- Click **Detach route** in the HUD header to move the graph into its own window. Click **Attach** in that window (or **Attach route** in the HUD) to return it. Header actions stay visible while scrolling and remain usable with geometry locked. Use the native free cursor for these controls.
+- UMM also provides an **Attached to HUD / Detached window** selector, visibility, collection range (100–50,000 m), profile height and displayed content.
 - Show/hide tracks, junctions, speed/grade signs, signals, other signs and opposing observations. These are display filters; all observations remain in the complete UMM catalogue.
 - Choose separate background and text/graphics opacity for each window. Metric selection/order/units and train details remain configurable.
 - With the native game cursor available, drag a header or its lower-right grip. Both windows scroll when content exceeds the chosen size. UMM also provides explicit size fields and an optional geometry lock.
@@ -16,9 +17,11 @@ One HUD with compact columns or a horizontal driving strip, selected in UMM. Bot
 
 Selected operating metrics run left to right in measured label/value cells, wrapping when necessary. The default selection includes speed, throttle/reverser, train/independent/dynamic brake application, mechanical power demand, tractive effort, brake-pipe pressure and gradient. The inherited metric catalogue, raw native ports, units and ordering remain configurable in Unity Mod Manager (UMM).
 
-Route collection defaults to **50,000 metres** along the currently selected native track connections. The display has a readable near profile and a full-range overview up to 50 km. In UMM, select **Expand the passive route atlas** for five equal range tiles (10 km each at the 50 km setting); select **Inspect every retained route event here** for the complete paginated catalogue, including distance, source ID, direction, aspect, reservation and freshness.
+Route collection defaults to **50,000 metres** along the currently selected native track connections. The default display is one continuous grade profile, marker row and distance axis across the selected range, up to 50 km. A 5 km close-up and five-section atlas are optional duplicate views of that same route, not additional coverage. Enable them separately in UMM if wanted; select **Inspect every retained route event here** for the complete paginated catalogue, including distance, source ID, direction, aspect, reservation and freshness.
 
-Dense markers combine into exact counts. Clustering and pagination never remove records or select only important events. Native track entries, junctions and every associated physical sign part/accessory are retained, including opposite-facing observations. Geometry samples form the grade profile separately; geometry-derived speed estimates are not presented as posted limits. Profile slopes show relative elevation with stated vertical exaggeration.
+Dense markers combine into exact counts. Clustering and pagination never remove records or select only important events. Native track entries, junctions and every associated physical sign part/accessory are retained, including opposite-facing observations. Geometry samples form the grade profile separately; geometry-derived speed estimates are not presented as posted limits. Profile slopes show relative elevation with stated vertical exaggeration. S/V/J/G/T identify signal/speed/junction/grade/track markers; numbers identify groups of retained events. Tokens use contrasting text on bright signal backgrounds.
+
+On the first load of 0.2.1, the simpler continuous view is selected once: optional close-up and five-section atlas are turned off. Range, window placement, metric choices and other settings are preserved. Subsequent display choices are remembered.
 
 The walker has no old 100-track, 64-signal or presentation-row completion cap. Work continues across Update frames. Directed native intervals prevent repeated traversal, including return to the untravelled prefix of the starting track. A loop closes at the first already covered directed span. The display reports reached distance and actual termination, and shades unknown space. A shorter loop, dead end, missing geometry, partial sign association or unavailable signals is never labelled complete 50 km event coverage.
 
@@ -26,7 +29,7 @@ The collector reads native geometry and sign metadata without adding sign collid
 
 ## Candidate status
 
-Version **0.2.0** is built and packaged for testing. [The handover](docs/HANDOVER.md) records zero-warning game-reference compilation, 128 route-core checks, 14 conversion checks and 51 metadata-contract checks. These do not establish in-game layout, full-route source coverage or frame timing. Window mouse interaction and visual acceptance remain pending in [VALIDATION.md](docs/VALIDATION.md).
+Version **0.2.1** is built and packaged for testing. [The handover](docs/HANDOVER.md) records zero-warning game-reference compilation, 128 route-core checks, 14 conversion checks and 51 metadata-contract checks. These do not establish in-game layout, full-route source coverage or frame timing. Window mouse interaction and visual acceptance remain pending in [VALIDATION.md](docs/VALIDATION.md).
 
 The candidate has its own DadsRouteHUD mod ID, DLL and settings. Building and packaging never install it. For a later test installation, select the desired HUD in UMM and restart. Dad's Driving HUD and previous Rinzler files/settings are not migrated or overwritten.
 
@@ -49,7 +52,7 @@ dotnet run --project tests/RouteCore.Tests.csproj --configuration Release
 ./Package.ps1
 ```
 
-Output: artifacts/DadsRouteHUD-0.2.0.zip. QuantitiesNet is built from pinned MIT source. Current game assemblies are local references; game/Unity/UMM/optional DLLs and obsolete upstream lib/ binaries are excluded from packages. [Project context](docs/PROJECT_CONTEXT.md) records architecture and provenance.
+Output: artifacts/DadsRouteHUD-0.2.1.zip. QuantitiesNet is built from pinned MIT source. Current game assemblies are local references; game/Unity/UMM/optional DLLs and obsolete upstream lib/ binaries are excluded from packages. [Project context](docs/PROJECT_CONTEXT.md) records architecture and provenance.
 
 ## Reading the metrics
 

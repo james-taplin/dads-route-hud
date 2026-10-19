@@ -38,7 +38,8 @@ namespace DvMod.HeadsUpDisplay
         private static Vector2 inspectorScroll;
         private static GUIStyle? inspectorText;
         private static GUIStyle? inspectorHeading;
-        public static float Height { get; private set; }        public static float PlotBackgroundOpacity { get; set; } = 0.72f;
+        public static float Height { get; private set; }
+        public static float PlotBackgroundOpacity { get; set; } = 0.72f;
 
         public static void PrepareLayout(RouteSnapshot<RailTrack> current, float availableWidth, int fontSize, Settings.LayoutSettings settings)
         {
@@ -61,8 +62,9 @@ namespace DvMod.HeadsUpDisplay
             profileHeight = settings.profileHeight;
             expanded = settings.expandedAtlas; showStatus = settings.showRouteStatus;
             showNear = settings.showNearProfile; showOverview = settings.showOverview; showNext = settings.showNextEvent;
-            BuildClusters(nearClusters, 0, nearDistance, width, true);
-            BuildClusters(overviewClusters, 0, fullRange, width, true);
+            nearClusters.Clear(); overviewClusters.Clear();
+            if (showNear) BuildClusters(nearClusters, 0, nearDistance, width, true);
+            if (showOverview) BuildClusters(overviewClusters, 0, fullRange, width, true);
             atlasClusters.Clear();
             if (expanded)
                 for (var tile = 0; tile < 5; tile++)
@@ -71,13 +73,14 @@ namespace DvMod.HeadsUpDisplay
                     BuildClusters(clusters, tile * fullRange / 5, (tile + 1) * fullRange / 5, (width - 16) / 5, tile == 4);
                     atlasClusters.Add(clusters);
                 }
-            status = $"Geometry {Km(snapshot.ReachedDistance)} / {Km(snapshot.RequestedDistance)}  |  capture: {Friendly(snapshot.Termination.ToString())}"
-                + $"  |  {snapshot.Events.Count} retained  |  {(snapshot.IsCollecting ? "Collecting" : "Snapshot")}  |  coverage in UMM";
+            status = $"Route {Km(snapshot.ReachedDistance)} / {Km(snapshot.RequestedDistance)}  ·  {snapshot.Events.Count} items"
+                + (snapshot.IsCollecting ? "  ·  refreshing" : snapshot.Termination == RouteWalkTermination.HorizonReached
+                    ? "" : "  ·  " + Friendly(snapshot.Termination.ToString()));
             var upcoming = snapshot.Events.FirstOrDefault(e => e.Distance > 0 && IsVisible(e));
             nextEventColor = upcoming != null && upcoming.Kind == RouteEventKind.Signal ? EventColor(upcoming) : Color.white;
             nextEvent = upcoming == null ? "No displayed event ahead; complete retained catalogue in UMM." : "Next " + FormatEvent(upcoming);
             Height = (showStatus ? line : 0) + (showNear ? 3 * line + profileHeight : 0)
-                + (showOverview ? 2 * line : 0) + (showNext ? line : 0) + (expanded ? 3 * line + profileHeight : 0);
+                + (showOverview ? 5 * line + profileHeight : 0) + (showNext ? line : 0) + (expanded ? 3 * line + profileHeight : 0);
             if (Height == 0) Height = line;
         }
 
@@ -111,19 +114,25 @@ namespace DvMod.HeadsUpDisplay
             var area = GUILayoutUtility.GetRect(width, Height, GUILayout.Width(width), GUILayout.Height(Height));
             var y = area.y;
             if (showStatus) { Text(new Rect(area.x, y, width, line), status, Styles.noWrap); y += line; }
+            if (showOverview)
+            {
+                var profile = new Rect(area.x, y + line, width, profileHeight);
+                var exaggeration = ProfileExaggeration(profile, 0, fullRange);
+                Text(new Rect(area.x, y, width, line), $"Track ahead  0–{Km(fullRange)}  ·  elevation ×{exaggeration:F0}", Styles.noWrap); y += line;
+                DrawProfile(new Rect(area.x, y, width, profileHeight), 0, fullRange); y += profileHeight;
+                DrawClusters(new Rect(area.x, y, width, line), overviewClusters, 0, fullRange); y += line;
+                DrawAxis(new Rect(area.x, y, width, line), 0, fullRange, 5); y += line;
+                Text(new Rect(area.x, y, width, line), "S signal   V speed   J junction   G grade   T track", Styles.noWrap); y += line;
+                Text(new Rect(area.x, y, width, line), "Numbers = grouped events · all items in UMM", Styles.noWrap); y += line;
+            }
             if (showNear)
             {
                 var profile = new Rect(area.x, y + line, width, profileHeight);
                 var exaggeration = ProfileExaggeration(profile, 0, nearDistance);
-                Text(new Rect(area.x, y, width, line), $"NEAR 0–{Km(nearDistance)} · relative elevation ×{exaggeration:F1} · S signal V speed J junction G grade T track", Styles.noWrap);
+                Text(new Rect(area.x, y, width, line), $"Close-up  0–{Km(nearDistance)}  ·  elevation ×{exaggeration:F0}", Styles.noWrap);
                 DrawProfile(profile, 0, nearDistance); y += line + profileHeight;
                 DrawClusters(new Rect(area.x, y, width, line), nearClusters, 0, nearDistance); y += line;
                 DrawAxis(new Rect(area.x, y, width, line), 0, nearDistance, 5); y += line;
-            }
-            if (showOverview)
-            {
-                DrawClusters(new Rect(area.x, y, width, line), overviewClusters, 0, fullRange); y += line;
-                DrawAxis(new Rect(area.x, y, width, line), 0, fullRange, 5, "FULL 0"); y += line;
             }
             if (showNext)
             {
@@ -133,7 +142,7 @@ namespace DvMod.HeadsUpDisplay
             }
             if (expanded)
             {
-                Text(new Rect(area.x, y, width, line), "ATLAS · display filters apply · every retained event remains in the UMM catalogue", Styles.noWrap); y += line;
+                Text(new Rect(area.x, y, width, line), "Optional atlas · five sections of the same route", Styles.noWrap); y += line;
                 var tileWidth = (width - 16) / 5;
                 for (var tile = 0; tile < 5; tile++)
                 {
@@ -178,7 +187,11 @@ namespace DvMod.HeadsUpDisplay
                 if (cluster.Count == 1 && !cluster.First.AppliesToTravel) color *= 0.55f;
                 Fill(box, color);
                 var token = cluster.Count == 1 ? EventToken(cluster.First.Kind) : cluster.Count.ToString(CultureInfo.InvariantCulture);
+                var savedContent = GUI.contentColor;
+                // White/green signal backgrounds need dark tokens to remain legible.
+                GUI.contentColor = color.r * 0.2126f + color.g * 0.7152f + color.b * 0.0722f > 0.55f ? Color.black : Color.white;
                 Text(box, token, Styles.centeredBold);
+                GUI.contentColor = savedContent;
             }
         }
 

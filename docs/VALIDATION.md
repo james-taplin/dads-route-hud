@@ -51,3 +51,10 @@ The route suite now includes window recovery across changed resolutions, corrupt
 ## Periodic signal publication - pending game confirmation
 
 The supplied recording shows 79 retained items, then 52 with signals missing for approximately 1.65-1.75 seconds, then 79 again by 1.8 seconds. The 128-check suite includes holding the previous valid same-route capture while its signal replacement is collected, atomic replacement and invalidation. In game, observe several periodic refreshes while stopped and moving: markers/counts must not drop to the native-only view during replacement; refreshing status must be explicit. Change route/locomotive or disable the signal source and confirm old signal facts clear. Automated core tests do not execute the Unity service or prove its runtime behavior.
+
+
+## 0.2.1 continuous route and header actions - game acceptance pending
+
+Confirm the first upgrade displays one continuous profile/marker row/axis across the selected range (20 km remains 20 km; 50 km remains 50 km). The optional close-up and sectioned atlas start off once; enabling either persists across restarts. Changing presentation must not alter retained IDs/counts, horizon, loop termination or collection source.
+
+With the native free cursor, click Detach route, drag and resize the detached graph, scroll its content and click Attach. Repeat with geometry locked, with graph previously hidden, and with event-list-only selected. Header clicks must not start dragging. Buttons remain outside the scrolled body and actions take effect on the next Layout. Check small/large resolutions and fonts, overlap of both windows, bright signal marker tokens, normal driving keys, locked cursor, and persistence after save/restart. The second window uses the same collector. Confirm all previous metric/range/window choices survive migration.

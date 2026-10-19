@@ -30,6 +30,7 @@ namespace DvMod.HeadsUpDisplay
             DataProviders.Register();
             if (!settings.drivingDefaultsApplied) settings.ApplyDrivingPreset();
             settings.MigrateWindows();
+            if (settings.MigrateRouteDisplay()) RequestSettingsSave();
             settings.ClampLayout();
             new Harmony(modEntry.Info.Id).PatchAll(typeof(Main).Assembly);
             modEntry.OnGUI = OnGui;
