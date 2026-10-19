@@ -47,7 +47,7 @@ namespace DvMod.HeadsUpDisplay
                 | (settings.showNearProfile ? 4 : 0) | (settings.showOverview ? 8 : 0) | (settings.showNextEvent ? 16 : 0)
                 | (settings.showTracks ? 32 : 0) | (settings.showJunctions ? 64 : 0) | (settings.showSpeeds ? 128 : 0)
                 | (settings.showGrades ? 256 : 0) | (settings.showSignals ? 512 : 0) | (settings.showOtherSigns ? 1024 : 0)
-                | (settings.showOpposite ? 2048 : 0);
+                | (settings.showOpposite ? 2048 : 0) | (settings.fitRouteToWidth ? 4096 : 0);
             var units = Main.settings.trackInfoSettings.distanceUnits;
             if (ReferenceEquals(snapshot, current) && width == availableWidth && previousKey == flags
                 && previousFont == fontSize && previousNear == settings.nearDistance
@@ -57,8 +57,8 @@ namespace DvMod.HeadsUpDisplay
             snapshot = current;
             width = Mathf.Max(1, availableWidth);
             line = fontSize + 6;
-            fullRange = Math.Max(1, snapshot.RequestedDistance);
-            nearDistance = Math.Max(1, Math.Min(fullRange, settings.nearDistance));
+            fullRange = RouteGraphScale.End(snapshot.RequestedDistance, snapshot.ReachedDistance, settings.fitRouteToWidth);
+            nearDistance = Math.Min(fullRange, Math.Max(1, settings.nearDistance));
             profileHeight = settings.profileHeight;
             expanded = settings.expandedAtlas; showStatus = settings.showRouteStatus;
             showNear = settings.showNearProfile; showOverview = settings.showOverview; showNext = settings.showNextEvent;
@@ -73,9 +73,9 @@ namespace DvMod.HeadsUpDisplay
                     BuildClusters(clusters, tile * fullRange / 5, (tile + 1) * fullRange / 5, (width - 16) / 5, tile == 4);
                     atlasClusters.Add(clusters);
                 }
-            status = $"Route {Km(snapshot.ReachedDistance)} / {Km(snapshot.RequestedDistance)}  ·  {snapshot.Events.Count} items"
-                + (snapshot.IsCollecting ? "  ·  refreshing" : snapshot.Termination == RouteWalkTermination.HorizonReached
-                    ? "" : "  ·  " + Friendly(snapshot.Termination.ToString()));
+            status = $"Mapped {Metres(snapshot.ReachedDistance)} / {Metres(snapshot.RequestedDistance)} requested  ·  {snapshot.Events.Count} items"
+                + (snapshot.Termination == RouteWalkTermination.HorizonReached ? "" : "  ·  " + Friendly(snapshot.Termination.ToString()))
+                + (snapshot.IsCollecting ? "  ·  refreshing" : "");
             var upcoming = snapshot.Events.FirstOrDefault(e => e.Distance > 0 && IsVisible(e));
             nextEventColor = upcoming != null && upcoming.Kind == RouteEventKind.Signal ? EventColor(upcoming) : Color.white;
             nextEvent = upcoming == null ? "No displayed event ahead; complete retained catalogue in UMM." : "Next " + FormatEvent(upcoming);
@@ -118,7 +118,7 @@ namespace DvMod.HeadsUpDisplay
             {
                 var profile = new Rect(area.x, y + line, width, profileHeight);
                 var exaggeration = ProfileExaggeration(profile, 0, fullRange);
-                Text(new Rect(area.x, y, width, line), $"Track ahead  0–{Km(fullRange)}  ·  elevation ×{exaggeration:F0}", Styles.noWrap); y += line;
+                Text(new Rect(area.x, y, width, line), $"Track ahead  0–{Metres(fullRange)}  ·  elevation ×{exaggeration:F0}", Styles.noWrap); y += line;
                 DrawProfile(new Rect(area.x, y, width, profileHeight), 0, fullRange); y += profileHeight;
                 DrawClusters(new Rect(area.x, y, width, line), overviewClusters, 0, fullRange); y += line;
                 DrawAxis(new Rect(area.x, y, width, line), 0, fullRange, 5); y += line;
@@ -129,7 +129,7 @@ namespace DvMod.HeadsUpDisplay
             {
                 var profile = new Rect(area.x, y + line, width, profileHeight);
                 var exaggeration = ProfileExaggeration(profile, 0, nearDistance);
-                Text(new Rect(area.x, y, width, line), $"Close-up  0–{Km(nearDistance)}  ·  elevation ×{exaggeration:F0}", Styles.noWrap);
+                Text(new Rect(area.x, y, width, line), $"Close-up  0–{Metres(nearDistance)}  ·  elevation ×{exaggeration:F0}", Styles.noWrap);
                 DrawProfile(profile, 0, nearDistance); y += line + profileHeight;
                 DrawClusters(new Rect(area.x, y, width, line), nearClusters, 0, nearDistance); y += line;
                 DrawAxis(new Rect(area.x, y, width, line), 0, nearDistance, 5); y += line;
@@ -199,14 +199,14 @@ namespace DvMod.HeadsUpDisplay
             Math.Max(20, Styles.TextWidth(snapshot.Events.Count.ToString(CultureInfo.InvariantCulture), Styles.noWrapBold) + 6));
 
         private static float MarkerCentre(double distance, double start, double end, float plotWidth, float markerWidth) =>
-            Mathf.Clamp((float)((distance - start) / (end - start)) * plotWidth, markerWidth / 2, plotWidth - markerWidth / 2);
+            Mathf.Clamp((float)RouteGraphScale.Fraction(distance, start, end) * plotWidth, markerWidth / 2, plotWidth - markerWidth / 2);
 
         private static void DrawAxis(Rect rect, double start, double end, int divisions, string? title = null)
         {
             for (var tick = 0; tick <= divisions; tick++)
             {
                 var distance = start + (end - start) * tick / divisions;
-                var label = tick == 0 && title != null ? title : Km(distance);
+                var label = tick == 0 && title != null ? title : Metres(distance);
                 var textWidth = Styles.TextWidth(label, Styles.noWrap);
                 var x = rect.x + rect.width * tick / divisions;
                 x = Mathf.Clamp(x - textWidth / 2, rect.x, Mathf.Max(rect.x, rect.xMax - textWidth));
@@ -243,9 +243,9 @@ namespace DvMod.HeadsUpDisplay
                 var d2 = Math.Min(end, b.Distance);
                 var e1 = a.Elevation + (b.Elevation - a.Elevation) * (d1 - a.Distance) / (b.Distance - a.Distance);
                 var e2 = a.Elevation + (b.Elevation - a.Elevation) * (d2 - a.Distance) / (b.Distance - a.Distance);
-                var p1 = new Vector2(rect.x + (float)((d1 - start) / (end - start)) * rect.width,
+                var p1 = new Vector2(rect.x + (float)RouteGraphScale.Fraction(d1, start, end) * rect.width,
                     rect.yMax - 2 - (float)((e1 - low) / span) * (rect.height - 4));
-                var p2 = new Vector2(rect.x + (float)((d2 - start) / (end - start)) * rect.width,
+                var p2 = new Vector2(rect.x + (float)RouteGraphScale.Fraction(d2, start, end) * rect.width,
                     rect.yMax - 2 - (float)((e2 - low) / span) * (rect.height - 4));
                 DrawLine(p1, p2, new Color(0.45f, 0.85f, 0.72f), 2);
             }
@@ -273,7 +273,7 @@ namespace DvMod.HeadsUpDisplay
         private static void ShadeUnknown(Rect rect, double start, double end)
         {
             var reached = Math.Max(start, Math.Min(end, snapshot.ReachedDistance));
-            var x = rect.x + (float)((reached - start) / (end - start)) * rect.width;
+            var x = rect.x + (float)RouteGraphScale.Fraction(reached, start, end) * rect.width;
             Fill(new Rect(x, rect.y, rect.xMax - x, rect.height), new Color(0.18f, 0.18f, 0.19f, PlotBackgroundOpacity));
             if (Event.current.type != EventType.Repaint) return;
             for (var stripe = x; stripe < rect.xMax; stripe += 8)
@@ -309,7 +309,7 @@ namespace DvMod.HeadsUpDisplay
             : Main.settings.trackInfoSettings.distanceUnits == Settings.TrackInfoSettings.EventDistanceUnits.ft
                 ? (distance / 0.3048).ToString("0", CultureInfo.InvariantCulture) + " ft"
                 : (distance / 1000).ToString("0.#", CultureInfo.InvariantCulture) + " km";
-        private static string Metres(double distance) => Main.settings.trackInfoSettings.distanceUnits == Settings.TrackInfoSettings.EventDistanceUnits.m && distance < 1000 ? distance.ToString("0", CultureInfo.InvariantCulture) + " m" : Km(distance);
+        private static string Metres(double distance) => Main.settings.trackInfoSettings.distanceUnits == Settings.TrackInfoSettings.EventDistanceUnits.m && distance < 1000 ? distance.ToString(distance < 1 ? "0.##" : "0", CultureInfo.InvariantCulture) + " m" : Km(distance);
         private static string Friendly(string value) => string.Concat(value.Select((c, i) => i > 0 && char.IsUpper(c) ? " " + c : c.ToString()));
         private static string EventToken(RouteEventKind kind) => kind == RouteEventKind.Signal ? "S" : kind == RouteEventKind.Speed ? "V"
             : kind == RouteEventKind.Junction ? "J" : kind == RouteEventKind.Grade ? "G" : kind == RouteEventKind.Track ? "T" : "?";

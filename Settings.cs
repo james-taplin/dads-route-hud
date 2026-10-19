@@ -402,6 +402,7 @@ namespace DvMod.HeadsUpDisplay
             public bool showRouteStatus = true;
             public bool showNearProfile;
             public bool showOverview = true;
+            public bool fitRouteToWidth = true;
             public bool showNextEvent = true;
             public bool showTracks = true;
             public bool showJunctions = true;
@@ -508,6 +509,9 @@ namespace DvMod.HeadsUpDisplay
             layoutSettings.showRouteStatus = GUILayout.Toggle(layoutSettings.showRouteStatus, "Route status and coverage");
             layoutSettings.showNearProfile = GUILayout.Toggle(layoutSettings.showNearProfile, "Also show a close-up of the first few kilometres");
             layoutSettings.showOverview = GUILayout.Toggle(layoutSettings.showOverview, "Continuous full-range track-ahead graph");
+            layoutSettings.fitRouteToWidth = GUILayout.Toolbar(layoutSettings.fitRouteToWidth ? 0 : 1,
+                new[] { "Fit available route to width", "Selected-distance scale" }) == 0;
+            GUILayout.Label("Fit uses the actual mapped distance for the full graph width. The requested look-ahead remains unchanged and is shown separately. Selected-distance scale keeps unavailable coverage striped.");
             layoutSettings.showNextEvent = GUILayout.Toggle(layoutSettings.showNextEvent, "Next event summary");
             layoutSettings.expandedAtlas = GUILayout.Toggle(layoutSettings.expandedAtlas, "Also show five range sections (optional atlas)");
             GUILayout.Label("The full-range graph already covers the entire look-ahead. Close-up and sectioned atlas repeat the same data; they do not extend collection.");

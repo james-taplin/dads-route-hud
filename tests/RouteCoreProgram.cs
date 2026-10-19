@@ -36,8 +36,30 @@ internal static class RouteCoreProgram
         RestoredAndResizedWindows();
         AtomicDisplayReplacement();
         ConfigurableMetricColumns();
+        FittedRouteGraph();
         SyntheticTiming();
         Console.WriteLine(checks + " route-core checks passed.");
+    }
+
+    private static void FittedRouteGraph()
+    {
+        foreach (var requested in new[] { 100d, 5000, 10000, 20000, 50000 })
+        {
+            var end = RouteGraphScale.End(requested, requested, true);
+            Check(end == requested && RouteGraphScale.Fraction(requested, 0, end) == 1,
+                "A completed selected range reaches the full graph width without a fixed 50 km denominator");
+        }
+        var fitted = RouteGraphScale.End(20000, 4900, true);
+        Check(fitted == 4900 && RouteGraphScale.Fraction(4900, 0, fitted) == 1, "The reported 4.9/20 km case fills the graph using its actual mapped distance");
+        Check(RouteGraphScale.Fraction(2450, 0, fitted) == 0.5, "Mid-route markers/profile share the fitted scale");
+        var fixedEnd = RouteGraphScale.End(20000, 4900, false);
+        Check(fixedEnd == 20000 && RouteGraphScale.Fraction(4900, 0, fixedEnd) == 0.245, "Selected-distance mode preserves true unavailable coverage");
+        Check(RouteGraphScale.End(20000, 0, true) == 20000, "An empty capture retains a valid waiting axis");
+        Check(RouteGraphScale.End(20000, 50000, true) == 20000, "Fit never displays beyond the selected horizon");
+        Check(RouteGraphScale.End(20000, 0.5, true) == 0.5, "A short positive capture can still fill the width");
+        Check(RouteGraphScale.Fraction(980, 980, 1960) == 0 && RouteGraphScale.Fraction(1960, 980, 1960) == 1, "Atlas subranges use their own shared start/end scale");
+        Check(RouteGraphScale.End(double.NaN, double.NaN, true) == 1
+            && RouteGraphScale.Fraction(1, 0, 0) == 0 && RouteGraphScale.Fraction(1, 0, double.NaN) == 0, "Invalid/empty ranges cannot generate invalid graph coordinates");
     }
 
     private static void ConfigurableMetricColumns()
