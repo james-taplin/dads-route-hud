@@ -246,6 +246,37 @@ internal static class RouteCoreProgram
         try { new RouteWalkBuilder<string>(graph, "good", 0, true).Step(0); }
         catch (ArgumentOutOfRangeException) { threw = true; }
         Check(threw, "Nonpositive per-step work budget rejected");
+        NamedTermination();
+    }
+
+    /// <summary>A route short of the horizon must say which directed track it stopped on.</summary>
+    private static void NamedTermination()
+    {
+        var deadEnd = Finish(new Graph().Track("only", 100), "only", 0, true);
+        Check(deadEnd.TerminalTrack == "only" && deadEnd.TerminalForward,
+            "Dead end names the track it ended on");
+
+        // The track whose geometry is unavailable is named, not the last one traversed.
+        var ungenerated = new Graph().Track("first", 100).Next("first", true, "absent", true);
+        var missing = Finish(ungenerated, "first", 0, true);
+        Check(missing.Termination == RouteWalkTermination.MissingGeometry
+            && missing.TerminalTrack == "absent" && missing.ReachedDistance == 100,
+            "Unavailable next geometry names that track");
+
+        var reverse = new Graph().Track("entry", 100).Track("stub", 50).Next("entry", false, "stub", false);
+        var reversed = Finish(reverse, "entry", 100, false);
+        Check(reversed.Termination == RouteWalkTermination.EndOfTrack
+            && reversed.TerminalTrack == "stub" && !reversed.TerminalForward
+            && reversed.ReachedDistance == 150, "Reverse travel names the directed terminal track");
+
+        var loop = new Graph().Track("ring", 400).Next("ring", true, "ring", true);
+        var closed = Finish(loop, "ring", 0, true);
+        Check(closed.Termination == RouteWalkTermination.LoopClosed && closed.TerminalTrack == "ring",
+            "Loop closure names its own track");
+
+        var full = Finish(new Graph().Track("long", 60000), "long", 0, true, 20000);
+        Check(full.Termination == RouteWalkTermination.HorizonReached && full.ReachedDistance == 20000
+            && full.TerminalTrack == "long", "Full selected look-ahead still reports its track");
     }
 
     private static void Pagination()

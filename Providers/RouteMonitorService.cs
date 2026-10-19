@@ -87,10 +87,15 @@ namespace DvMod.HeadsUpDisplay
                     || (walk != null && requested != walk.RequestedDistance);
                 if (!hardChange && walk == null && retained == null && Time.realtimeSinceStartup < nextRefresh)
                     return;
+                // One position fix per frame: the publication below reuses this exact result
+                // instead of scanning every captured interval a second time.
+                var located = false;
+                var position = 0d;
                 if (!hardChange && retained != null)
                 {
-                    if (!TryOffset(retained.Intervals, track, span, forward, captureOffset, out captureOffset)
-                        || !CheckNextConnections(retained.Intervals, 16)) hardChange = true;
+                    located = TryOffset(retained.Intervals, track, span, forward, captureOffset, out position);
+                    if (!located || !CheckNextConnections(retained.Intervals, 16)) hardChange = true;
+                    else captureOffset = position;
                 }
                 if (hardChange || (walk == null && retained == null))
                     Begin(car!, track, span, forward, vehicleForward, requested, true);
@@ -126,8 +131,9 @@ namespace DvMod.HeadsUpDisplay
                     if (Time.realtimeSinceStartup >= nextPublish)
                     {
                         // Position is measured against this capture's exact native intervals.
-                        if (TryOffset(retained.Intervals, track, span, forward, captureOffset, out var offset))
+                        if (located || TryOffset(retained.Intervals, track, span, forward, captureOffset, out position))
                         {
+                            var offset = position;
                             captureOffset = offset;
                             var incoming = MergeOptional(retained);
                             var previous = display.Capture;
@@ -249,8 +255,7 @@ namespace DvMod.HeadsUpDisplay
                     continue;
                 }
                 if (watched.Add(interval.Track)) interval.Track.TrackPointsUpdated += OnGeometryChanged;
-                var trackId = interval.Track.LogicTrack()?.ID?.ToString();
-                var label = string.IsNullOrWhiteSpace(trackId) ? interval.Track.name : trackId + " · " + interval.Track.name;
+                var label = TrackLabel(interval.Track);
                 var eventId = "track:" + interval.Track.GetInstanceID() + ":" + index;
                 collectingEvents.Add(new RouteEvent(eventId, interval.StartDistance, RouteEventKind.Track, label));
                 eventTracks[eventId] = interval.Track;
@@ -326,10 +331,13 @@ namespace DvMod.HeadsUpDisplay
                 Current = RouteSnapshot<RailTrack>.Empty(Main.settings.trackInfoSettings.maxEventSpan);
                 return;
             }
+            var ending = DescribeShortRoute(walk);
+            var diagnostics = ending == null ? collectingProblems.AsEnumerable()
+                : new[] { ending }.Concat(collectingProblems);
             retained = new RouteSnapshot<RailTrack>(revision, walk.RequestedDistance, walk.ReachedDistance,
                 walk.Termination, collectionIntervals, collectingEvents, collectingProfile, false,
                 NativeRouteSignIndex.Coverage, "Optional signals pending sample",
-                collectingProblems.Concat(NativeRouteSignIndex.Diagnostics));
+                diagnostics.Concat(NativeRouteSignIndex.Diagnostics));
             signRevision = NativeRouteSignIndex.SnapshotRevision;
             signalPublicationPending = display.Capture != null;
             walk = null;
@@ -349,6 +357,60 @@ namespace DvMod.HeadsUpDisplay
             var ids = new HashSet<string>(retained.Events.Where(e => e.Kind == RouteEventKind.Track).Select(e => e.Id));
             foreach (var id in eventTracks.Keys.ToArray()) if (!ids.Contains(id)) eventTracks.Remove(id);
         }
+
+        private static string TrackLabel(RailTrack track)
+        {
+            if (track == null) return "an unavailable track";
+            var id = track.LogicTrack()?.ID?.ToString();
+            return string.IsNullOrWhiteSpace(id) ? track.name : id + " · " + track.name;
+        }
+
+        /// <summary>
+        /// Explains a capture that stops before the selected look-ahead, naming the exact native
+        /// track it ended on and, where that end is a junction, the branch the game has selected.
+        /// This distinguishes a switch set into a short stub from a buffer stop or unavailable
+        /// geometry, without guessing a cause.
+        /// </summary>
+        private static string? DescribeShortRoute(RouteWalkBuilder<RailTrack> source)
+        {
+            if (source.Termination == RouteWalkTermination.HorizonReached) return null;
+            var track = source.TerminalTrack;
+            var text = "Route stopped at " + Metres(source.ReachedDistance) + " of "
+                + Metres(source.RequestedDistance) + " selected, on " + TrackLabel(track)
+                + ": " + Reason(source.Termination);
+            var junction = track == null ? null : source.TerminalForward ? track.outJunction : track.inJunction;
+            if (junction != null)
+                text += " That end is junction " + junction.name + ", branch "
+                    + (junction.selectedBranch + 1) + " of " + (junction.outBranches?.Count ?? 0) + " selected.";
+            if (Main.settings.enableLogging) Main.mod?.Logger.Log(text);
+            return text;
+        }
+
+        private static string Reason(RouteWalkTermination termination)
+        {
+            switch (termination)
+            {
+                case RouteWalkTermination.LoopClosed:
+                    return "the selected route returns onto track it has already covered.";
+                case RouteWalkTermination.EndOfTrack:
+                    return "the game reports no further connection along the selected branches.";
+                case RouteWalkTermination.MissingGeometry:
+                    return "the next track's native geometry was unavailable; a refresh will retry.";
+                case RouteWalkTermination.InvalidGeometry:
+                    return "that track's native point set is not usable.";
+                case RouteWalkTermination.NoProgress:
+                    return "the next native span was too small to advance the route distance.";
+                case RouteWalkTermination.InvalidStart:
+                    return "the starting position is outside that track's native span.";
+                case RouteWalkTermination.InvalidDistance:
+                    return "the selected look-ahead distance is not usable.";
+                default:
+                    return "capture ended as " + termination + ".";
+            }
+        }
+
+        private static string Metres(double value) =>
+            value.ToString("N0", CultureInfo.InvariantCulture) + " m";
 
         private static RouteSnapshot<RailTrack> MergeOptional(RouteSnapshot<RailTrack> source)
         {

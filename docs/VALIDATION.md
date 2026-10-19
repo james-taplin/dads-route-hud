@@ -13,7 +13,7 @@ git diff --check
 ./Package.ps1
 ```
 
-Expect zero build warnings/errors, 14 driving checks, 152 route/layout checks and 51 metadata matches. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave parent source, installed HUD/settings and Params.xml unchanged.
+Expect zero build warnings/errors, 14 driving checks, 162 route/layout checks and 51 metadata matches. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave parent source, installed HUD/settings and Params.xml unchanged.
 
 ## Native route acceptance — pending
 
@@ -62,9 +62,18 @@ With the native free cursor, click Detach route, drag and resize the detached gr
 
 ## Three sections and metric columns (0.3.0) - game acceptance pending
 
-The pure suite has 139 checks, including explicit/Auto columns, ordering, empty columns, fold/restore without mutating saved assignments, exact-once retention and shallow tape geometry. In UMM choose Separate all three sections. Verify independent drag/resize, Attach from both detached windows, both main-header actions, overlap/input priority and lock behavior. Set column count 1, 2 and 8, assign and reorder metrics in each, reduce/restore the count, search/filter, and confirm no selection/unit/precision loss. Switch detached metrics between columns and tape: the details window size must stay fixed. Use Top tape / Bottom tape and manually stretch a tape, check scrolling when too short, save/restart, and inspect all three opacities/visibility controls. Route, optional source handling and loop/flicker behavior must remain unchanged with one shared collector.
+The pure suite has 162 checks, including explicit/Auto columns, ordering, empty columns, fold/restore without mutating saved assignments, exact-once retention and shallow tape geometry. In UMM choose Separate all three sections. Verify independent drag/resize, Attach from both detached windows, both main-header actions, overlap/input priority and lock behavior. Set column count 1, 2 and 8, assign and reorder metrics in each, reduce/restore the count, search/filter, and confirm no selection/unit/precision loss. Switch detached metrics between columns and tape: the details window size must stay fixed. Use Top tape / Bottom tape and manually stretch a tape, check scrolling when too short, save/restart, and inspect all three opacities/visibility controls. Route, optional source handling and loop/flicker behavior must remain unchanged with one shared collector.
 
 
 ## Graph fit (0.3.1) - game acceptance pending
 
 Test selected ranges 100 m, 5, 10, 20 and 50 km. Completed ranges must span the full axis. With a shorter available capture (e.g. 4.9/20 km), fit mode fills the width but labels 4.9 km while retaining the 20 km request in status. Toggle Selected-distance scale: unavailable tail becomes striped without changing collection. Confirm profile/markers/axis/atlas agreement, zero-data waiting, loop/dead-end termination, moving/refreshing captures, units, saved settings and no event loss. Pure tests cover these scale boundaries; they do not execute IMGUI or validate live route coverage.
+
+## Named route termination — pending
+
+Select a look-ahead longer than the track actually ahead and open the UMM inspector. One diagnostic
+must name the directed native track the capture ended on, the reached and selected distances, and
+the reason; at a junction it must also name the junction and the selected branch. Throw that switch
+to a through route and confirm the next capture reaches further and the diagnostic disappears once
+the horizon is reached. Confirm the status line's termination label is unchanged, that nothing is
+logged unless logging is enabled, and that no extra native call is made while walking.

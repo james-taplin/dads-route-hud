@@ -1,12 +1,21 @@
 # Development status
 
-Version 0.3.1 is a test candidate. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
+Version 0.3.2 is a test candidate. Version 0.3.1 was built, packaged and installed for testing on
+19 October 2026; 0.3.2 has been built but not installed or packaged. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
 
 The existing-instance signal-manager lookup performance correction is present. The periodic refresh correction keeps the last valid same-route signal view until its replacement is ready, rather than exposing a temporary native-only catalogue. Changes of route/vehicle/source invalidate old observations. In-game confirmation of the latest publication and GUI behavior remains pending.
 
-Automated checks of the development snapshot: zero-warning installed-reference compilation, 139 route/window/layout checks, 14 conversion checks, and 51 metadata contracts. Public CI runs the two pure suites without proprietary references. Follow VALIDATION.md for actual game acceptance. Synthetic in-memory timings are not game performance measurements.
+Automated checks of the current snapshot: zero-warning installed-reference compilation, 162
+route/window/layout checks, 14 conversion checks, and 51/51 metadata contracts. Public CI runs the
+two pure suites without proprietary references. Follow VALIDATION.md for actual game acceptance.
+Synthetic in-memory timings are not game performance measurements.
 
 Publication intentionally starts from the original MIT HUD history with a source-only import. Koteq's compatibility work remains credited. No game DLLs, private settings, backups or local profiling evidence are included. Neither Rinzler's binary nor its implementation is used. See LICENSING.md for pinned notices.
+
+The public repository is behind this checkout: it holds the source import up to 0.2.0, and the
+0.2.1, 0.3.0, 0.3.1 and 0.3.2 commits are local only. No tag, release or binary has been published,
+and no pull request has been opened upstream. The GitHub default branch therefore does not match
+any installed build.
 
 Builds/packages do not install or modify game files. Use one HUD ID at a time in UMM; back up an existing installation and settings before changing it. Optional DVSignals, AI Traffic and DoubleTrack compatibility must not become mandatory dependencies. Multiplayer locomotive-ID ownership remains a stretch goal, not a supported feature.
 
@@ -32,3 +41,26 @@ For a tape along the top or bottom, select Driving strip and resize the detached
 The default graph scale fits the available mapped route to the full width and labels that actual distance. For example, 4.9 km mapped of a requested 20 km uses a 0-4.9 km graph; the status separately retains 20 km requested. UMM's Selected-distance scale restores a fixed 0-requested axis with striped unavailable coverage. Full profile, markers, axes, shading, optional close-up and atlas share the chosen scale. Positive sub-kilometre ranges are supported. Display fitting does not extend collection, alter retained observations, change the requested horizon or bypass loops/dead ends.
 
 The supplied screenshot reported only 4.9/20 km available. Inspection confirmed the previous renderer already used RequestedDistance rather than a fixed 50 km denominator. The cause of that shorter capture is not established by the screenshot. This update implements the explicitly selected fit behavior and preserves visible termination status while refreshing; it does not claim to repair an unverified collection defect. In-game visual acceptance remains pending.
+
+
+## Named route termination (0.3.2)
+
+A capture that stops before the selected look-ahead now records one diagnostic naming the directed
+native track it ended on, the distance reached against the distance selected, and the specific
+reason: no further connection along the selected branches, unavailable or unusable native geometry,
+a loop closure, an unrepresentable advance, or an unusable start or selected distance. Where that
+end is a junction, the diagnostic also names the junction and which of its branches the game has
+selected. This distinguishes a switch set into a short stub from a buffer stop or from geometry the
+game has not supplied, instead of leaving a short route unexplained. The diagnostic appears in the
+UMM inspector beside the existing coverage text, and is also written to the log when logging is
+enabled. The status line's termination label is unchanged.
+
+The walker exposes the terminal directed track for this purpose and makes no new native calls while
+walking; collection and display are unchanged, and a short route is still reported as reached rather
+than padded. Nothing here establishes why any particular route ended short; it reports what the game
+returned at that point.
+
+Publication reuses the single position fix already computed each frame rather than scanning every
+captured interval a second time. Behaviour and cadence are unchanged. The per-frame topology
+revalidation budget is deliberately left as it was, so a switch thrown ahead is still noticed within
+a few seconds.

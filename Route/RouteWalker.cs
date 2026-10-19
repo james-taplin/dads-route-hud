@@ -94,6 +94,14 @@ namespace DvMod.HeadsUpDisplay
         public RouteWalkTermination Termination { get; private set; }
         public bool IsComplete => Termination != RouteWalkTermination.InProgress;
 
+        /// <summary>
+        /// The directed track the walk stopped on, so a caller can name where a route ends
+        /// short of the horizon. For unavailable geometry this is the track that failed, not
+        /// the last one traversed. Native inspection stays with the caller's graph adapter.
+        /// </summary>
+        public TTrack TerminalTrack => currentTrack;
+        public bool TerminalForward => currentForward;
+
         public RouteWalkBuilder(IRouteGraph<TTrack> graph, TTrack startTrack, double startSpan,
             bool forward, double requestedDistance = DefaultRequestedDistance,
             IEqualityComparer<TTrack>? comparer = null)
@@ -170,6 +178,8 @@ namespace DvMod.HeadsUpDisplay
             if (traversed > 0)
             {
                 var reached = !closesLoop && wanted == remaining ? RequestedDistance : ReachedDistance + traversed;
+                // The second test is not redundant: it also rejects progress that survives as a
+                // distance but is absorbed when measured against the horizon.
                 if (reached <= ReachedDistance || RequestedDistance - reached >= remaining)
                 {
                     // A positive native span too small to advance representable route distance.
