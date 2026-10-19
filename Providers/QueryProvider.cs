@@ -8,6 +8,7 @@ namespace DvMod.HeadsUpDisplay
     {
         private readonly Func<TrainCar, float?> provider;
         private readonly Func<float, string> formatter;
+        private bool loggedFailure;
 
         public FloatQueryDataProvider(string label, Func<TrainCar, float?> provider, Func<float, string> formatter, IComparable? order = null, bool hidden = false)
         : base(label, order, hidden)
@@ -29,8 +30,17 @@ namespace DvMod.HeadsUpDisplay
 
         public override bool TryGetValue(TrainCar car, out float v)
         {
-            var result = provider(car);
-            if (result == null)
+            float? result = null;
+            try { result = provider(car); }
+            catch (Exception exception)
+            {
+                if (!loggedFailure)
+                {
+                    Main.mod?.Logger.Warning(Label + " unavailable: " + exception.Message);
+                    loggedFailure = true;
+                }
+            }
+            if (!result.HasValue || !DrivingMath.IsFinite(result.Value))
             {
                 v = default;
                 return false;
@@ -44,6 +54,7 @@ namespace DvMod.HeadsUpDisplay
     where D : IDimension, new()
     {
         private readonly Func<TrainCar, Quantity<D>?> provider;
+        private bool loggedFailure;
 
         public QuantityQueryDataProvider(
             string label,
@@ -75,8 +86,17 @@ namespace DvMod.HeadsUpDisplay
 
         public override bool TryGetValue(TrainCar car, out Quantity<D> v)
         {
-            var result = provider(car);
-            if (result != null)
+            Quantity<D>? result = null;
+            try { result = provider(car); }
+            catch (Exception exception)
+            {
+                if (!loggedFailure)
+                {
+                    Main.mod?.Logger.Warning(Label + " unavailable: " + exception.Message);
+                    loggedFailure = true;
+                }
+            }
+            if (result != null && !double.IsNaN(result.Scalar) && !double.IsInfinity(result.Scalar))
             {
                 v = result;
                 return true;

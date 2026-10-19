@@ -1,7 +1,9 @@
 using DV.PointSet;
 using DV.Signs;
 using HarmonyLib;
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using UnityEngine;
 
@@ -14,11 +16,58 @@ namespace DvMod.HeadsUpDisplay
 
         private static readonly Dictionary<RailTrack, List<TrackEvent>> indexedTracks =
             new Dictionary<RailTrack, List<TrackEvent>>();
+        private static readonly Dictionary<GameObject, GameObject> signProbes = new Dictionary<GameObject, GameObject>();
+        private static readonly HashSet<Collider> ownedColliders = new HashSet<Collider>();
+        private static readonly HashSet<RailTrack> watchedTracks = new HashSet<RailTrack>();
+        private static float nextRefresh;
+
+        public static void Clear()
+        {
+            indexedTracks.Clear();
+            TrackFollower.Clear();
+            nextRefresh = 0;
+        }
+
+        public static void Shutdown()
+        {
+            foreach (var track in watchedTracks)
+                if (track != null) track.TrackPointsUpdated -= OnTrackPointsUpdated;
+            watchedTracks.Clear();
+            foreach (var probe in signProbes.Values)
+                if (probe != null) UnityEngine.Object.Destroy(probe);
+            signProbes.Clear();
+            ownedColliders.Clear();
+            Clear();
+        }
+
+        // Streamed signs and optional route mods can appear after LoadingFinished.
+        // A modest refresh also expires geometry caches after signs are repositioned.
+        public static void Refresh()
+        {
+            if (Time.realtimeSinceStartup < nextRefresh) return;
+            nextRefresh = Time.realtimeSinceStartup + 5f;
+            indexedTracks.Clear();
+            TrackFollower.Clear();
+            foreach (var pair in signProbes.ToArray())
+                if (pair.Key == null || pair.Value == null) signProbes.Remove(pair.Key!);
+            ownedColliders.RemoveWhere(collider => collider == null);
+            watchedTracks.RemoveWhere(track => track == null);
+            foreach (var data in UnityEngine.Object.FindObjectsOfType<SignGeneratorData>()) RegisterSign(data);
+            foreach (var debug in UnityEngine.Object.FindObjectsOfType<SignDebug>())
+                RegisterProbe(debug.gameObject, debug.text);
+        }
+
+        private static void OnTrackPointsUpdated(RailTrack track)
+        {
+            indexedTracks.Remove(track);
+            TrackFollower.Clear();
+        }
 
         public static IEnumerable<TrackEvent> GetTrackEvents(RailTrack track)
         {
             if (!indexedTracks.TryGetValue(track, out var data))
             {
+                if (watchedTracks.Add(track)) track.TrackPointsUpdated += OnTrackPointsUpdated;
                 data = indexedTracks[track] = GenerateTrackEvents(track).ToList();
             }
             return data;
@@ -43,10 +92,11 @@ namespace DvMod.HeadsUpDisplay
                 case 2:
                     if (int.TryParse(parts[0], out var top))
                     {
-                        if (parts[1][0] == '+' || parts[1][0] == '-')
+                        if (parts[1].Length > 0 && (parts[1][0] == '+' || parts[1][0] == '-'))
                         {
                             yield return new SpeedLimitEvent(span, direction, top * 10);
-                            yield return new GradeEvent(span, direction, float.Parse(parts[1]));
+                            if (float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var grade))
+                                yield return new GradeEvent(span, direction, grade);
                         }
                         else if (int.TryParse(parts[1], out var bottom))
                         {
@@ -75,10 +125,12 @@ namespace DvMod.HeadsUpDisplay
             var hits = Physics.RaycastAll(
                 new Ray((Vector3)point.position + WorldMover.currentMove, point.forward),
                 (float)point.spanToNextPoint,
-                1 << SIGN_COLLIDER_LAYER);
+                1 << SIGN_COLLIDER_LAYER,
+                QueryTriggerInteraction.Collide);
 
             foreach (var hit in hits)
             {
+                if (!ownedColliders.Contains(hit.collider)) continue;
                 var dp = Vector3.Dot(hit.collider.transform.forward, point.forward);
                 bool direction = dp < 0f;
                 foreach (var trackEvent in ParseSign(hit.collider.name, direction, point.span + hit.distance))
@@ -88,7 +140,8 @@ namespace DvMod.HeadsUpDisplay
 
         private static IEnumerable<TrackEvent> GenerateTrackEvents(RailTrack track)
         {
-            var pointSet = track.GetPointSet();
+            var pointSet = track.GetKinkedPointSet();
+            if (pointSet == null || pointSet.span <= 0) yield break;
             EquiPointSet simplified = EquiPointSet.ResampleEquidistant(
                 pointSet,
                 Mathf.Min(SIMPLIFIED_RESOLUTION, (float)pointSet.span / 3));
@@ -100,28 +153,49 @@ namespace DvMod.HeadsUpDisplay
             }
         }
 
-        [HarmonyPatch(typeof(Streamer), nameof(Streamer.AddSceneGO))]
+        // Legacy text-list support is retained as source only. This fork uses exact native
+        // placement observations; do not register the earlier sign-probe scene patch.
         public static class AddSceneGOPatch
         {
             public static void Postfix(GameObject sceneGO)
             {
-                var signDebugs = sceneGO.GetComponentsInChildren<SignDebug>();
-                bool foundSigns = false;
-                foreach (var signDebug in signDebugs)
-                {
-                    signDebug.gameObject.layer = SIGN_COLLIDER_LAYER;
-                    var collider = signDebug.gameObject.AddComponent<CapsuleCollider>();
-                    collider.name = signDebug.text;
-                    collider.center = new Vector3(2f, 0f, 0f);
-                    collider.height = 10f;
-                    collider.direction = 1; // along Y-axis
-                    collider.isTrigger = true;
-
-                    foundSigns = true;
-                }
-                if (foundSigns)
-                    indexedTracks.Clear();
+                if (!Main.enabled || !Main.settings.trackInfoSettings.enabled) return;
+                foreach (var data in sceneGO.GetComponentsInChildren<SignGeneratorData>()) RegisterSign(data);
+                foreach (var debug in sceneGO.GetComponentsInChildren<SignDebug>()) RegisterProbe(debug.gameObject, debug.text);
+                Clear();
             }
+        }
+
+        private static void RegisterSign(SignGeneratorData data)
+        {
+            if (data.signParameters == null) return;
+            var text = string.Join("\n", data.signParameters.Select(parameter => parameter.signText)
+                .Where(line => !string.IsNullOrWhiteSpace(line)));
+            RegisterProbe(data.gameObject, text);
+        }
+
+        private static void RegisterProbe(GameObject sign, string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return;
+            if (signProbes.TryGetValue(sign, out var existing) && existing != null)
+            {
+                existing.name = text;
+                return;
+            }
+            // Native post-generation metadata does not retain the associated track/span.
+            // Preserve upstream's ray geometry instead of assigning a nearest parallel
+            // track. Own an isolated child so sign layers and colliders remain untouched.
+            var probe = new GameObject(text) { layer = SIGN_COLLIDER_LAYER };
+            probe.transform.SetParent(sign.transform, false);
+            var collider = probe.AddComponent<CapsuleCollider>();
+            collider.center = new Vector3(2f, 0f, 0f);
+            collider.radius = 0.5f;
+            collider.height = 10f;
+            collider.direction = 1;
+            collider.isTrigger = true;
+            ownedColliders.Add(collider);
+            signProbes[sign] = probe;
+            indexedTracks.Clear();
         }
     }
 }

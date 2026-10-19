@@ -2,3 +2,6 @@
 bin/
 obj/
 /dv
+/build/
+/artifacts/
+/lib/

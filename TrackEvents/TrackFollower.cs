@@ -1,7 +1,8 @@
-using DV.Logic.Job;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DV.Logic.Job;
+using UnityEngine;
 
 namespace DvMod.HeadsUpDisplay
 {
@@ -30,8 +31,10 @@ namespace DvMod.HeadsUpDisplay
             double distanceFromStart = 0f;
             for (int i = 0; i < MAX_ITERATIONS; i++)
             {
-                yield return new TrackChangeEvent(distanceFromStart, track.logicTrack.ID);
                 bool travelDirection = distance > 0;
+                var logicTrack = track.LogicTrack();
+                var id = logicTrack?.ID ?? new TrackID("#Y", "#S", "0", "#T");
+                yield return new TrackChangeEvent(distanceFromStart, id, track, startSpan, travelDirection);
 
                 var trackEvents = TrackIndexer
                     .GetTrackEvents(track, travelDirection, startSpan)
@@ -57,7 +60,7 @@ namespace DvMod.HeadsUpDisplay
                 }
                 else
                 {
-                    double trackSpan = track.GetPointSet().span;
+                    double trackSpan = track.GetKinkedPointSet().span;
                     if (newSpan >= trackSpan)
                     {
                         nextBranch = track.GetOutBranch();
@@ -82,22 +85,23 @@ namespace DvMod.HeadsUpDisplay
                     yield return new JunctionEvent(distanceFromStart, true, nextJunction);
 
                 track = nextBranch.track;
-                startSpan = nextBranch.first ? 0.0 : nextBranch.track.GetPointSet().span;
+                startSpan = nextBranch.first ? 0.0 : nextBranch.track.GetKinkedPointSet().span;
             }
         }
 
-        private static readonly Func<TrackID, string> SubYardSelector = (TrackID id) => $"{id.yardId}-{id.subYardId}";
+        private static readonly Func<TrackID, string> SubYardSelector = (TrackID id) => $"{id.yardId}-{id.SignIDSubYardPart}";
         private static readonly Func<TrackID, string> TrackSelector = (TrackID id) => id.TrackPartOnly;
 
         public static string DescribeJunctionBranches(Junction junction)
         {
+            if (junction.outBranches == null || junction.outBranches.Count < 2) return "Junction";
             var left = DescribeBranch(junction.outBranches[0]);
             var right = DescribeBranch(junction.outBranches[1]);
             if (left == null || right == null)
                 return junction.selectedBranch == 0 ? "<<<" : ">>>";
 
             var selector =
-                (left.yardId != right.yardId || left.subYardId != right.subYardId) ? SubYardSelector :
+                (left.yardId != right.yardId || left.SignIDSubYardPart != right.SignIDSubYardPart) ? SubYardSelector :
                 TrackSelector;
 
             return junction.selectedBranch == 0
@@ -109,21 +113,30 @@ namespace DvMod.HeadsUpDisplay
             (start.first ? start.track.GetAllOutBranches() : start.track.GetAllInBranches()) ?? Enumerable.Empty<Junction.Branch>();
 
         private static readonly Dictionary<Junction.Branch, TrackID?> descriptions = new Dictionary<Junction.Branch, TrackID?>();
+        private static float descriptionsExpire;
+
+        public static void Clear()
+        {
+            descriptions.Clear();
+            descriptionsExpire = Time.realtimeSinceStartup + 5f;
+        }
 
         private static TrackID? DescribeBranch(Junction.Branch startBranch)
         {
+            if (Time.realtimeSinceStartup >= descriptionsExpire) Clear();
             if (descriptions.TryGetValue(startBranch, out var trackID))
                 return trackID;
 
             // Main.DebugLog($"Starting BFS at {startBranch.track.logicTrack.ID}");
             var visited = new HashSet<RailTrack>();
             var queue = new Queue<Junction.Branch>(GetNextBranches(startBranch));
-            while (queue.Count > 0)
+            while (queue.Count > 0 && visited.Count < 1000)
             {
                 var branch = queue.Dequeue();
                 // Main.DebugLog($"Examining {branch}, track={branch.track}, logicTrack={branch.track.logicTrack}, ID={branch.track.logicTrack.ID}");
-                trackID = branch.track.logicTrack.ID;
-                if (!trackID.IsGeneric())
+                if (branch.track == null) continue;
+                trackID = branch.track.LogicTrack()?.ID;
+                if (trackID != null && !trackID.IsGeneric())
                 {
                     descriptions[startBranch] = trackID;
                     return trackID;

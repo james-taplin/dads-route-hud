@@ -21,16 +21,22 @@ namespace DvMod.HeadsUpDisplay
     public class TrackChangeEvent : TrackEvent
     {
         public readonly TrackID ID;
+        public readonly RailTrack? Track;
+        public readonly double TrackStartSpan;
+        public readonly bool Forward;
 
-        public TrackChangeEvent(double span, TrackID ID)
+        public TrackChangeEvent(double span, TrackID ID, RailTrack? track = null, double trackStartSpan = 0, bool forward = true)
         : base(span)
         {
             this.ID = ID;
+            Track = track;
+            TrackStartSpan = trackStartSpan;
+            Forward = forward;
         }
 
         public override TrackEvent WithSpan(double span, bool direction)
         {
-            return new TrackChangeEvent(span, this.ID);
+            return new TrackChangeEvent(span, this.ID, Track, TrackStartSpan, Forward);
         }
 
         public override string ToString()
@@ -230,6 +236,7 @@ namespace DvMod.HeadsUpDisplay
         {
             return events.Where(ev =>
                 !(ev is TrackChangeEvent tce) || !tce.ID.IsGeneric()
+                    || (tce.Track != null && OptionalSignalTelemetry.GetTrackReservation(tce.Track).Length > 0)
             );
         }
     }

@@ -1,0 +1,30 @@
+name: Pure checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pure-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Driving conversions
+        run: dotnet run --project tests/DrivingMath.Tests.csproj --configuration Release -p:NuGetAudit=false
+      - name: Route walk, retention and pagination
+        run: dotnet run --project tests/RouteCore.Tests.csproj --configuration Release -p:NuGetAudit=false
+
+# Game-reference builds require a local game installation: use Build.ps1.
+# Only Package.ps1's explicit allowlist may produce a distributable candidate.
+# This workflow never installs, publishes releases or uploads runtime DLLs.

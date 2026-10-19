@@ -1,36 +1,53 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFramework>net48</TargetFramework>
+    <AssemblyName>DadsRouteHUD</AssemblyName>
     <RootNamespace>DvMod.HeadsUpDisplay</RootNamespace>
-    <InformationalVersion>1.1.0</InformationalVersion>
+    <Version>0.2.0</Version>
     <LangVersion>8.0</LangVersion>
+    <CodePage>65001</CodePage>
     <Nullable>enable</Nullable>
+    <Deterministic>true</Deterministic>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <!-- Upstream lib/ binaries must never win over the installed-game hints. -->
+    <AssemblySearchPaths>{HintPathFromItem};{TargetFrameworkDirectory};{RawFileName}</AssemblySearchPaths>
+    <GamePath Condition="'$(GamePath)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Derail Valley</GamePath>
+    <GameManagedPath>$([System.IO.Path]::GetFullPath('$(GamePath)\DerailValley_Data\Managed'))</GameManagedPath>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.0" PrivateAssets="all" />
+    <Compile Include="*.cs;Overlay\**\*.cs;Providers\**\*.cs;TrackEvents\**\*.cs;Route\**\*.cs" />
+    <None Remove="lib\**" />
+    <Content Remove="lib\**" />
+    <GameReference Include="Assembly-CSharp;DV.BrakeSystem;DV.CabControls.Spec;DV.Common;DV.Interaction;DV.OriginShiftInfo;DV.PointSet;DV.RailTrack;DV.SignPlacer;DV.Simulation;DV.ThingTypes;DV.UI;DV.Utils;UnityEngine;UnityEngine.CoreModule;UnityEngine.IMGUIModule;UnityEngine.PhysicsModule;UnityEngine.TextRenderingModule;WorldStreamer;net.smkd.vector3d" />
+    <Reference Include="@(GameReference)">
+      <HintPath>$(GameManagedPath)\%(Identity).dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>$(GameManagedPath)\UnityModManager\0Harmony.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="UnityModManager">
+      <HintPath>$(GameManagedPath)\UnityModManager\UnityModManager.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <ProjectReference Include="build-support\QuantitiesNet.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="RedworkDE.Publicizer" Version="0.2.2" />
-    <PublicizeAssembly Include="Assembly-CSharp" Private="True" Readonly="True" />
-    <PublicizeAssembly Include="DV.BrakeSystem" Private="True" Readonly="True" />
-    <Reference Include="Assembly-CSharp" />
-    <Reference Include="0Harmony" />
-    <Reference Include="BezierCurves" />
-    <Reference Include="DV.BrakeSystem" />
-    <Reference Include="DV.PointSet" />
-    <Reference Include="DV.Utils" />
-    <Reference Include="UnityEngine" />
-    <Reference Include="UnityEngine.CoreModule" />
-    <Reference Include="UnityEngine.IMGUIModule" />
-    <Reference Include="UnityEngine.PhysicsModule" />
-    <Reference Include="UnityEngine.TextRenderingModule" />
-    <Reference Include="UnityModManager" />
-    <Reference Include="net.smkd.vector3d" />
-  </ItemGroup>
+  <Target Name="CheckGameReferences" BeforeTargets="ResolveReferences">
+    <Error Condition="!Exists('$(GameManagedPath)\Assembly-CSharp.dll')" Text="Derail Valley not found at $(GamePath). Pass -p:GamePath=... or use Build.ps1 -GamePath ..." />
+    <Error Condition="!Exists('$(GameManagedPath)\UnityModManager\UnityModManager.dll')" Text="Unity Mod Manager is not installed in the selected Derail Valley installation." />
+    <Error Condition="!Exists('$(MSBuildProjectDirectory)\.submodules\QuantitiesNet\Quantity.cs')" Text="QuantitiesNet source is missing. Run git submodule update --init --recursive." />
+    <Error Condition="!Exists('$(GameManagedPath)\%(GameReference.Identity).dll')" Text="Missing installed game reference: $(GameManagedPath)\%(GameReference.Identity).dll" />
+  </Target>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\QuantitiesNet\QuantitiesNet\QuantitiesNet.csproj" />
-  </ItemGroup>
+  <Target Name="RecordResolvedReferences" BeforeTargets="CoreCompile" DependsOnTargets="ResolveReferences">
+    <ItemGroup>
+      <ResolvedGameReference Include="@(ReferencePath)" Condition="$([System.String]::Copy('%(ReferencePath.HintPath)').StartsWith('$(GameManagedPath)'))" />
+    </ItemGroup>
+    <Error Condition="'%(ResolvedGameReference.FullPath)' != '%(ResolvedGameReference.HintPath)'" Text="Game reference resolved outside its installed-game HintPath: %(ResolvedGameReference.FullPath)" />
+    <MakeDir Directories="$(MSBuildProjectDirectory)\build" />
+    <WriteLinesToFile File="$(MSBuildProjectDirectory)\build\resolved-references.txt" Lines="@(ReferencePath->'%(FullPath)')" Overwrite="true" />
+  </Target>
 </Project>

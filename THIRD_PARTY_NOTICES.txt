@@ -1,0 +1,40 @@
+Dad's Route HUD — third-party notices
+
+Public fork: https://github.com/james-taplin/dads-route-hud
+Source imported from the Dad's Route HUD development snapshot,
+with original MIT history retained and no committed game DLLs.
+
+Heads-up Display for Derail Valley
+Original author: Miles Spielberg (Zeibach/mspielberg)
+Original repository: https://github.com/mspielberg/dv-hud
+Original latest release: v1.1.0 (9acf926), 11 April 2022
+Licence: MIT; full original notice retained in LICENSE.
+
+Build-99 compatibility base
+Contributor: Koteq
+Repository: https://github.com/koteq/dv-hud
+Base commit: b09fe942ab5118e6aa348a153f686a537a483d0d
+Licence: repository MIT notice retained in LICENSE.
+
+QuantitiesNet
+Author: mspielberg
+Repository: https://github.com/mspielberg/QuantitiesNet
+Pinned submodule: 2b6522cb70df8108af0d96dec6ebdc6c35a673aa
+Licence: MIT; full notice retained in QuantitiesNet.LICENSE.
+
+Derail Valley, Unity and Unity Mod Manager assemblies are local build references.
+They are not included in this distribution. Harmony and Unity Mod Manager are
+provided by the user's installed mod loader, not redistributed here.
+
+Optional interoperability reads DVSignals and AI Traffic APIs from the user's
+loaded mods. Their assemblies, assets and implementations are not redistributed.
+DoubleTrack and multiplayer integrations also remain optional.
+
+Rinzler's Nexus package is not an implementation source or dependency of this
+fork. No Rinzler DLL/decompiled implementation is distributed. Prior limited
+decompiled inspection was used to compare features, so no formal clean-room
+claim is made.
+
+Dad's Route HUD fork additions are distributed under the MIT terms in LICENSE.
+Fork author/design/development direction: James; coding assistance: OpenAI Codex.
+See CREDITS.md and docs/LICENSING.md for attribution and pinned-source verification.

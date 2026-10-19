@@ -38,6 +38,7 @@ namespace DvMod.HeadsUpDisplay
         {
             GeneralProviders.Register();
             LocoProviders.Register();
+            ControlProviders.Register();
         }
     }
 }

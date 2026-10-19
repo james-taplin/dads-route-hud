@@ -1,13 +1,16 @@
-using DV.Logic.Job;
-using DV.MultipleUnit;
-using DV.Simulation.Brake;
-using QuantitiesNet;
-using static QuantitiesNet.Quantities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DV;
+using DV.Logic.Job;
+using DV.MultipleUnit;
+using DV.Simulation.Brake;
+using DV.ThingTypes;
+using DV.Utils;
+using QuantitiesNet;
 using UnityEngine;
 using UnityModManagerNet;
+using static QuantitiesNet.Quantities;
 
 namespace DvMod.HeadsUpDisplay
 {
@@ -78,9 +81,9 @@ namespace DvMod.HeadsUpDisplay
             var frontCar = cars.ElementAt(index - 1);
             var rearCar = cars.ElementAt(index);
             static bool IsFrontCoupledTo(TrainCar car, TrainCar attached) =>
-                car.frontCoupler.springyCJ && car.frontCoupler.coupledTo.train == attached;
+                /*car.frontCoupler.springyCJ &&*/ car.frontCoupler.coupledTo.train == attached;
             static bool IsRearCoupledTo(TrainCar car, TrainCar attached) =>
-                car.rearCoupler.springyCJ && car.rearCoupler?.coupledTo?.train == attached;
+                /*car.rearCoupler.springyCJ &&*/ car.rearCoupler?.coupledTo?.train == attached;
 
             (TrainCar car, bool isFront) FindCoupler()
             {
@@ -120,14 +123,14 @@ namespace DvMod.HeadsUpDisplay
 
         private static Pressure GetAuxReservoirPressure(TrainCar car)
         {
-            if (car.IsLoco)
-                return new Pressure(car.brakeSystem.mainReservoirPressure, QuantitiesNet.Units.Bar);
-            return GetPressure(Registry.GetProvider("Aux reservoir"), car);
+            return new Pressure(DrivingMath.GaugePressure(car.IsLoco
+                ? car.brakeSystem.mainReservoirPressure
+                : car.brakeSystem.auxReservoirPressure), QuantitiesNet.Units.Bar);
         }
 
         private static Pressure GetBrakeCylinderPressure(TrainCar car)
         {
-            return GetPressure(Registry.GetProvider("Brake cylinder"), car);
+            return new Pressure(DrivingMath.GaugePressure(car.brakeSystem.brakeCylinderPressure), QuantitiesNet.Units.Bar);
         }
 
         private static char GetTripleValveState(TrainCar car)
@@ -150,25 +153,25 @@ namespace DvMod.HeadsUpDisplay
 
             var firstCar = cars.First();
             var groupCars = new List<TrainCar>() { firstCar };
-            Pressure minBrakePipePressure = new Pressure(firstCar.brakeSystem.brakePipePressure, QuantitiesNet.Units.Bar);
+            Pressure minBrakePipePressure = new Pressure(DrivingMath.GaugePressure(firstCar.brakeSystem.brakePipePressure), QuantitiesNet.Units.Bar);
             Pressure minBrakeReservoirPressure = GetAuxReservoirPressure(firstCar);
             Pressure maxBrakeCylinderPressure = GetBrakeCylinderPressure(firstCar);
             float maxBrakeFactor = firstCar.brakeSystem.brakingFactor;
 
             var brakeModes = new SortedSet<char>();
 
-            if (!CarTypes.IsAnyLocomotiveOrTender(firstCar.carType))
+            if (!CarTypes.IsAnyLocomotiveOrTender(firstCar.carLivery))
                 brakeModes.Add(GetTripleValveState(firstCar));
 
             int i = 0;
             foreach (var (car, index) in cars.Select((x, i) => (x, i)))
             {
-                float carStress = car.GetComponent<TrainStress>().derailBuildUp;
+                float carStress = car.GetComponent<TrainStress>()?.derailBuildUp ?? 0f;
                 float? couplerStress = GetCouplerStress(cars, index);
-                Job? job = JobChainController.GetJobOfCar(car);
+                Job? job = SingletonBehaviour<JobsManager>.Instance.GetJobOfCar(car.logicCar);
                 Track? nextDestination = GetNextDestinationTrack(job, car.logicCar);
                 BrakeSystem brakeSystem = car.brakeSystem;
-                Pressure pipePressure = new Pressure(brakeSystem.brakePipePressure, QuantitiesNet.Units.Bar);
+                Pressure pipePressure = new Pressure(DrivingMath.GaugePressure(brakeSystem.brakePipePressure), QuantitiesNet.Units.Bar);
                 Pressure auxReservoirPressure = GetAuxReservoirPressure(car);
                 Pressure brakeCylinderPressure = GetBrakeCylinderPressure(car);
 
@@ -205,7 +208,7 @@ namespace DvMod.HeadsUpDisplay
                     maxBrakeFactor = brakeSystem.brakingFactor;
                     brakeModes.Clear();
 
-                    if (!CarTypes.IsAnyLocomotiveOrTender(car.carType))
+                    if (!CarTypes.IsAnyLocomotiveOrTender(car.carLivery))
                         brakeModes.Add(GetTripleValveState(car));
                 }
                 else
@@ -224,7 +227,7 @@ namespace DvMod.HeadsUpDisplay
                     if (brakeSystem.brakingFactor > maxBrakeFactor)
                         maxBrakeFactor = brakeSystem.brakingFactor;
 
-                    if (!CarTypes.IsAnyLocomotiveOrTender(car.carType))
+                    if (!CarTypes.IsAnyLocomotiveOrTender(car.carLivery))
                         brakeModes.Add(GetTripleValveState(car));
                 }
                 i++;
@@ -310,25 +313,19 @@ namespace DvMod.HeadsUpDisplay
             var isMultipleUnitCapable = car.TryGetComponent<MultipleUnitModule>(out var muModule);
             var frontMUDisconnected = isMultipleUnitCapable
                 && car.frontCoupler.coupledTo?.train?.carType == car.carType
-                && !muModule.frontCable.IsConnected;
+                && !muModule.FrontCable.IsConnected;
             var rearMUDisconnected = isMultipleUnitCapable
                 && car.rearCoupler.coupledTo?.train?.carType == car.carType
-                && !muModule.rearCable.IsConnected;
+                && !muModule.RearCable.IsConnected;
             var hasDisconnectedMUCable = frontMUDisconnected || rearMUDisconnected;
+            var isRunning = car.SimController.controlsOverrider?.EngineOnReader?.IsOn ?? true;
 
-            var isRunning = car.carType switch
-            {
-                TrainCarType.LocoShunter => car.GetComponent<LocoControllerShunter>().GetEngineRunning(),
-                TrainCarType.LocoDiesel => car.GetComponent<LocoControllerDiesel>().GetEngineRunning(),
-                _ => true,
-            };
-
-            return Color.HSVToRGB(HueOrange, hasDisconnectedMUCable ? 1 : 0, isRunning ? 1 : 0.8f);
+            return Color.HSVToRGB(HueOrange, hasDisconnectedMUCable ? 1 : 0, isRunning ? 1 : 0.5f);
         }
 
         private static void DrawCarStress(IEnumerable<CarGroup> groups)
         {
-            var derailThreshold = SimManager.instance.derailBuildUpThreshold;
+            var derailThreshold = Globals.G.GameParams.DerailBuildUpThreshold;
 
             GUILayout.Space(Overlay.ColumnSpacing);
             GUILayout.BeginVertical();
@@ -433,7 +430,8 @@ namespace DvMod.HeadsUpDisplay
             if (provider is IQuantityProvider quantityProvider)
             {
                 var providerSettings = Main.settings.drivingInfoSettings.GetProviderSettings(quantityProvider);
-                providerSettings.TryGetUnit(quantityProvider.Dimension, out var unit);
+                if (!providerSettings.TryGetUnit(quantityProvider.Dimension, out var unit))
+                    return pressure => pressure.In(QuantitiesNet.Units.Bar).ToString("F1");
                 return pressure => pressure.In(unit).ToString($"F{providerSettings.precision}");
             }
             return pressure => $"{pressure.Scalar:F2}";
@@ -445,14 +443,9 @@ namespace DvMod.HeadsUpDisplay
 
         private static void DrawCarBrakeStatus(IEnumerable<CarGroup> groups)
         {
-            var airBrakeModEnabled = UnityModManager.FindMod("AirBrake")?.Enabled ?? false;
             Overlay.DrawColumn(groups, "Pipe", g => BrakePipeFormatter(g.minBrakePipePressure));
-            if (airBrakeModEnabled)
-            {
-                Overlay.DrawColumn(groups, "Res", g => AuxReservoirFormatter(g.minBrakeReservoirPressure));
-                Overlay.DrawColumn(groups, "Mode", g => string.Join("", g.brakeModes));
-                Overlay.DrawColumn(groups, "Cyl", g => BrakeCylinderFormatter(g.maxBrakeCylinderPressure));
-            }
+            Overlay.DrawColumn(groups, "Res", g => AuxReservoirFormatter(g.minBrakeReservoirPressure));
+            Overlay.DrawColumn(groups, "Cyl", g => BrakeCylinderFormatter(g.maxBrakeCylinderPressure));
             Overlay.DrawColumn(groups, "Force", g => g.maxBrakeFactor.ToString("P0"), Styles.rightAlign);
         }
     }

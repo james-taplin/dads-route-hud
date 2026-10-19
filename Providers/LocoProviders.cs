@@ -1,111 +1,37 @@
-using DV;
-using HarmonyLib;
+using System;
 using QuantitiesNet;
 using static QuantitiesNet.Quantities;
 using static QuantitiesNet.Units;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Reflection;
-using UnityModManagerNet;
 
 namespace DvMod.HeadsUpDisplay
 {
     internal static class LocoProviders
     {
-        public static QuantityPushProvider<Dimensions.Force> tractiveEffortProvider =
-            new QuantityPushProvider<Dimensions.Force>("Tractive effort");
-
-        public static QuantityPushProvider<Dimensions.Force> adhesionProvider =
-            new QuantityPushProvider<Dimensions.Force>("Adhesion");
-
-        public static QuantityPushProvider<Dimensions.Power> indicatedPowerProvider =
-            new QuantityPushProvider<Dimensions.Power>("Power");
-
         public static void Register()
         {
-            Registry.Register(tractiveEffortProvider);
-            Registry.Register(adhesionProvider);
-            Registry.Register(indicatedPowerProvider);
-            Registry.Register(new FloatQueryDataProvider(
-                "Slip",
-                car => car.GetComponent<DrivingForce>()?.wheelslip,
-                f => $"{f:P1}"));
-
-            SteamLocoProviders.Register();
-        }
-
-        [HarmonyPatch]
-        public static class GetTractionForcePatch
-        {
-            public static void Postfix(LocoControllerBase __instance, float __result)
+            Registry.Register(new QuantityQueryDataProvider<Dimensions.Force>("Tractive effort", car =>
             {
-                if (!AppUtil.IsPaused)
-                {
-                    tractiveEffortProvider.SetValue(__instance.train, new Force(__result, Newton));
-                    indicatedPowerProvider.SetValue(__instance.train, new Force(__result, Newton) * new Velocity(__instance.GetSpeedKmH(), KilometersPerHour));
-                }
-            }
-
-            public static IEnumerable<MethodBase> TargetMethods()
+                var driving = car.SimController?.drivingForce;
+                return driving == null ? null : new Force(driving.generatedForce, Newton);
+            }));
+            Registry.Register(new QuantityQueryDataProvider<Dimensions.Power>("Power", car =>
             {
-                yield return AccessTools.Method(typeof(LocoControllerDiesel), nameof(LocoControllerBase.GetTractionForce));
-                yield return AccessTools.Method(typeof(LocoControllerShunter), nameof(LocoControllerBase.GetTractionForce));
-                yield return AccessTools.Method(typeof(LocoControllerSteam), nameof(LocoControllerBase.GetTractionForce));
-                if (UnityModManager.FindMod("DVCustomCarLoader")?.Assembly is Assembly assembly)
-                {
-                    var typeNames = new string[]
-                    {
-                        "DieselElectric.CustomLocoControllerDiesel",
-                        "Steam.CustomLocoControllerSteam",
-                    };
-                    var methods = typeNames
-                        .Select(n => assembly.GetType($"DVCustomCarLoader.LocoComponents.{n}"))
-                        .OfType<Type>()
-                        .Where(typeof(LocoControllerBase).IsAssignableFrom)
-                        .Select(t => t.GetMethod("GetTractionForce"))
-                        .OfType<MethodBase>();
-                    foreach (var method in methods)
-                        yield return method;
-                }
-            }
-        }
-
-        [HarmonyPatch(typeof(DrivingForce), "UpdateWheelslip")]
-        public static class UpdateWheelslipPatch
-        {
-            public static void Postfix(DrivingForce __instance, Bogie bogie)
+                var driving = car.SimController?.drivingForce;
+                // GetForwardSpeed is m/s. This is requested mechanical power, before adhesion limits.
+                return driving == null ? null : new Power(DrivingMath.MechanicalPower(driving.generatedForce, car.GetForwardSpeed()), Watt);
+            }));
+            Registry.Register(new QuantityQueryDataProvider<Dimensions.Force>("Adhesion", car =>
             {
-                var car = bogie.Car;
-                adhesionProvider.SetValue(car, new Force(__instance.tractionForceWheelslipLimit * car.Bogies.Length));
-            }
-        }
-    }
-
-    internal static class SteamLocoProviders
-    {
-        public static FloatPushProvider cutoffProvider = new FloatPushProvider("Cutoff", f => $"{f:P0}");
-
-        public static void Register()
-        {
-            Registry.Register(new QuantityQueryDataProvider<Dimensions.Pressure>("Boiler pressure", car =>
-                {
-                    var sim = car.GetComponent<SteamLocoSimulation>();
-                    if (sim == null)
-                        return null;
-                    return new Pressure(sim.boilerPressure.value, Bar);
-                }));
-            Registry.Register(cutoffProvider);
-        }
-
-        [HarmonyPatch(typeof(SteamLocoSimulation), "SimulateTick")]
-        public static class SimulateTickPatch
-        {
-            public static bool Prefix(SteamLocoSimulation __instance)
+                var wheels = car.SimController?.wheelslipController;
+                return wheels == null ? null : new Force(wheels.TotalForceLimit, Newton);
+            }));
+            Registry.Register(new FloatQueryDataProvider("Slip", car => car.SimController?.wheelslipController?.wheelslip, DrivingMath.Percent));
+            Registry.Register(new FloatQueryDataProvider("Adhesion demand", car =>
             {
-                cutoffProvider.SetValue(TrainCar.Resolve(__instance.gameObject), __instance.cutoff.value);
-                return true;
-            }
+                var sim = car.SimController;
+                if (sim?.drivingForce == null || sim.wheelslipController == null || sim.wheelslipController.TotalForceLimit <= 0f) return null;
+                return Math.Abs(sim.drivingForce.generatedForce) / sim.wheelslipController.TotalForceLimit;
+            }, value => DrivingMath.Number(value * 100f, 0, "%")));
         }
     }
 }
