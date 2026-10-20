@@ -112,6 +112,21 @@ namespace DvMod.HeadsUpDisplay
                 + " of " + branchCount.ToString(CultureInfo.InvariantCulture);
         }
 
+        /// <summary>
+        /// Describes a switch for the direction it is approached from. A facing switch states the
+        /// selected branch and which way it diverges; a trailing switch has no side to report, so
+        /// it states whether the switch is set to the track the route is actually on.
+        /// </summary>
+        public static string SwitchText(string? stationName, string? fallback, int selectedBranch,
+            int branchCount, bool trailing, bool setForRoute, RouteTurnDirection turn)
+        {
+            var text = SwitchName(stationName, fallback, trailing ? -1 : selectedBranch, branchCount);
+            if (trailing)
+                return text + " · trailing, " + (setForRoute ? "set for your route" : "set against you");
+            var word = RouteTurn.Word(turn);
+            return word.Length == 0 ? text : text + ", " + word;
+        }
+
         /// <summary>Signed grade with its sense spelled out, so a sign's number needs no decoding.</summary>
         public static string GradeText(double percent)
         {

@@ -1,11 +1,11 @@
 # Development status
 
-Version 0.3.3 is a test candidate. Versions 0.3.1 and 0.3.2 were built, packaged and installed for
-testing on 19 October 2026; 0.3.3 has been built but not installed or packaged. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
+Version 0.3.4 is a test candidate. Versions 0.3.1, 0.3.2 and 0.3.3 were built, packaged and
+installed for testing on 19-20 October 2026; 0.3.4 has been built but not installed or packaged. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
 
 The existing-instance signal-manager lookup performance correction is present. The periodic refresh correction keeps the last valid same-route signal view until its replacement is ready, rather than exposing a temporary native-only catalogue. Changes of route/vehicle/source invalidate old observations. In-game confirmation of the latest publication and GUI behavior remains pending.
 
-Automated checks of the current snapshot: zero-warning installed-reference compilation, 183
+Automated checks of the current snapshot: zero-warning installed-reference compilation, 200
 route/window/layout/naming checks, 14 conversion checks, and 51/51 metadata contracts. Public CI runs the
 two pure suites without proprietary references. Follow VALIDATION.md for actual game acceptance.
 Synthetic in-memory timings are not game performance measurements.
@@ -13,7 +13,7 @@ Synthetic in-memory timings are not game performance measurements.
 Publication intentionally starts from the original MIT HUD history with a source-only import. Koteq's compatibility work remains credited. No game DLLs, private settings, backups or local profiling evidence are included. Neither Rinzler's binary nor its implementation is used. See LICENSING.md for pinned notices.
 
 The public repository is behind this checkout: it holds the source import up to 0.2.0, and the
-0.2.1, 0.3.0, 0.3.1, 0.3.2 and 0.3.3 commits are local only. No tag, release or binary has been published,
+0.2.1, 0.3.0, 0.3.1, 0.3.2, 0.3.3 and 0.3.4 commits are local only. No tag, release or binary has been published,
 and no pull request has been opened upstream. The GitHub default branch therefore does not match
 any installed build.
 
@@ -87,3 +87,24 @@ identity, display filters still remove nothing, and the raw native type and sign
 observation's source detail for the UMM inspector. Naming happens once per capture, and station
 lookups are cached for the session and cleared with the rest of the capture state, so no per-frame
 cost is added. In-game acceptance of the new rows is untested.
+
+## Switch side on approach (0.3.4)
+
+A facing switch now carries a marker ahead of its description showing which way it takes the route
+relative to the direction of approach: "<<<" to the left, ">>>" to the right, and "|||" where the
+selected branch continues straight ahead within three degrees. The side is measured from the native
+heading where travel leaves the current track and where it enters the next one the route actually
+follows, so the marker always agrees with the captured route rather than with a separately read
+branch. The row also states it in words, as "branch 3 of 4, diverging right".
+
+A switch approached from one of its branches converges instead of diverging, so it has no side to
+report. Those rows carry no marker and say "trailing, set for your route" or "trailing, set against
+you", which states what the game has selected without asserting what the game will do about it. A
+switch at the very end of a capture has no following track, so its side is left unestablished and
+no marker is shown rather than a guess.
+
+The classification is pure and pinned by tests against real-world geometry, independent of the
+engine's handedness: heading north and leaving east is a right turn. Degenerate or unusable headings,
+and a straight reversal, are reported as unknown. Markers are this mod's own fixed tokens, never
+native text, and are the one field not escaped for display. Collection, retention and the existing
+junction event identity are unchanged.

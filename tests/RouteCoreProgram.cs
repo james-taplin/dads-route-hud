@@ -38,6 +38,7 @@ internal static class RouteCoreProgram
         ConfigurableMetricColumns();
         FittedRouteGraph();
         ReadableNames();
+        SwitchSides();
         SyntheticTiming();
         Console.WriteLine(checks + " route-core checks passed.");
     }
@@ -97,6 +98,46 @@ internal static class RouteCoreProgram
             RouteWalkTermination.HorizonReached, Array.Empty<RouteInterval<string>>(), new[] { coded },
             Array.Empty<RouteProfilePoint>(), false, "", ""), 5);
         Check(shifted.Events.Single().Code == "GF-B-5-L", "The game's code survives a shifted view");
+    }
+
+    /// <summary>
+    /// Switch sides are judged by real-world geometry: heading north and leaving east is a right
+    /// turn, whatever the engine's handedness.
+    /// </summary>
+    private static void SwitchSides()
+    {
+        const double north = 1, east = 1;
+        Check(RouteTurn.Classify(0, north, east, 0) == RouteTurnDirection.Right, "North to east is a right turn");
+        Check(RouteTurn.Classify(0, north, -east, 0) == RouteTurnDirection.Left, "North to west is a left turn");
+        Check(RouteTurn.Classify(east, 0, 0, -north) == RouteTurnDirection.Right, "East to south is a right turn");
+        Check(RouteTurn.Classify(east, 0, 0, north) == RouteTurnDirection.Left, "East to north is a left turn");
+        Check(RouteTurn.Classify(0, north, 0, north) == RouteTurnDirection.Ahead, "Unchanged heading is straight ahead");
+        Check(RouteTurn.Classify(0, 100, 1, 100) == RouteTurnDirection.Ahead, "A hair of divergence is still ahead");
+        Check(RouteTurn.Classify(0, 100, 20, 100) == RouteTurnDirection.Right, "A real divergence takes a side");
+        Check(RouteTurn.Classify(0, north, 0, -north) == RouteTurnDirection.Unknown, "A straight reversal has no side");
+        Check(RouteTurn.Classify(0, 0, east, 0) == RouteTurnDirection.Unknown, "A degenerate heading is unknown");
+        Check(RouteTurn.Classify(double.NaN, north, east, 0) == RouteTurnDirection.Unknown, "Unusable geometry is unknown");
+        // The classification must not depend on how long the sampled segments happen to be.
+        Check(RouteTurn.Classify(0, 0.01, 5000, 0) == RouteTurnDirection.Right, "Sample length does not change the side");
+
+        Check(RouteTurn.Marker(RouteTurnDirection.Left) == "<<<" && RouteTurn.Marker(RouteTurnDirection.Right) == ">>>"
+            && RouteTurn.Marker(RouteTurnDirection.Ahead) == "|||" && RouteTurn.Marker(RouteTurnDirection.Unknown) == "",
+            "Markers are fixed tokens and absent when the side is unknown");
+
+        Check(RouteNaming.SwitchText("Goods Factory", "j", 2, 4, false, false, RouteTurnDirection.Right)
+            == "Goods Factory switch · branch 3 of 4, diverging right", "A facing switch states its side");
+        Check(RouteNaming.SwitchText("Goods Factory", "j", 2, 4, false, false, RouteTurnDirection.Unknown)
+            == "Goods Factory switch · branch 3 of 4", "An unknown side is omitted, not guessed");
+        Check(RouteNaming.SwitchText("Harbor", "j", 1, 3, true, true, RouteTurnDirection.Unknown)
+            == "Harbor switch · trailing, set for your route", "A trailing switch set for the route says so");
+        Check(RouteNaming.SwitchText("Harbor", "j", 1, 3, true, false, RouteTurnDirection.Unknown)
+            == "Harbor switch · trailing, set against you", "A trailing switch set elsewhere is reported");
+
+        var marked = new RouteEvent("id", 20, RouteEventKind.Junction, "Harbor switch", marker: ">>>");
+        var shifted = RouteSnapshotView.Shift(new RouteSnapshot<string>(2, 100, 100,
+            RouteWalkTermination.HorizonReached, Array.Empty<RouteInterval<string>>(), new[] { marked },
+            Array.Empty<RouteProfilePoint>(), false, "", ""), 5);
+        Check(shifted.Events.Single().Marker == ">>>", "The marker survives a shifted view");
     }
 
     private static void FittedRouteGraph()

@@ -305,18 +305,22 @@ namespace DvMod.HeadsUpDisplay
             var rows = eventPage.Items.Select(RouteMonitor.EventRow).ToArray();
             var distanceWidth = 0f;
             var kindWidth = 0f;
+            var markerWidth = 0f;
             var codeWidth = 0f;
             foreach (var row in rows)
             {
                 distanceWidth = Mathf.Max(distanceWidth, Styles.TextWidth(row.Distance, Styles.rightAlign));
                 kindWidth = Mathf.Max(kindWidth, Styles.TextWidth(row.Kind, Styles.noWrap));
+                markerWidth = Mathf.Max(markerWidth, Styles.TextWidth(row.Marker, Styles.noWrap));
                 codeWidth = Mathf.Max(codeWidth, Styles.TextWidth(row.Code, Styles.noWrap));
             }
             // The description keeps whatever is left, and never less than a readable minimum.
-            var fixedWidth = distanceWidth + kindWidth + codeWidth + 3 * ColumnSpacing;
-            if (innerWidth - fixedWidth < 120) codeWidth = 0;
-            fixedWidth = distanceWidth + kindWidth + codeWidth + (codeWidth > 0 ? 3 : 2) * ColumnSpacing;
-            var descriptionWidth = Mathf.Max(60, innerWidth - fixedWidth);
+            var columns = 2 + (markerWidth > 0 ? 1 : 0);
+            if (innerWidth - (distanceWidth + kindWidth + markerWidth + codeWidth + (columns + 1) * ColumnSpacing) < 120)
+                codeWidth = 0;
+            if (codeWidth > 0) columns++;
+            var descriptionWidth = Mathf.Max(60,
+                innerWidth - (distanceWidth + kindWidth + markerWidth + codeWidth + columns * ColumnSpacing));
             for (var index = 0; index < rows.Length; index++)
             {
                 var row = rows[index];
@@ -328,6 +332,11 @@ namespace DvMod.HeadsUpDisplay
                 GUILayout.Label(row.Kind, Styles.noWrap, GUILayout.Width(kindWidth));
                 GUI.contentColor = saved;
                 GUILayout.Space(ColumnSpacing);
+                if (markerWidth > 0)
+                {
+                    GUILayout.Label(row.Marker, Styles.noWrap, GUILayout.Width(markerWidth));
+                    GUILayout.Space(ColumnSpacing);
+                }
                 if (eventPage.Items[index].Kind == RouteEventKind.Signal)
                     GUI.contentColor = RouteMonitor.EventColor(eventPage.Items[index]);
                 GUILayout.Label(row.Description, Styles.noWrap, GUILayout.Width(descriptionWidth));

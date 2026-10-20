@@ -15,6 +15,7 @@
     <Compile Include="../Route/RouteDisplayBuffer.cs" Link="RouteDisplayBuffer.cs" />
     <Compile Include="../Route/MetricColumns.cs" Link="MetricColumns.cs" />
     <Compile Include="../Route/RouteGraphScale.cs" Link="RouteGraphScale.cs" />
+    <Compile Include="../Route/RouteTurn.cs" Link="RouteTurn.cs" />
     <Compile Include="../Route/RouteNaming.cs" Link="RouteNaming.cs" />
     <Compile Include="RouteCoreProgram.cs" />
   </ItemGroup>

@@ -103,6 +103,39 @@ namespace DvMod.HeadsUpDisplay
                 && Finite(span) && span >= 0 && span <= pointSet.span;
         }
 
+        /// <summary>
+        /// The horizontal heading of travel at one end of a track: where travel leaves the far
+        /// end, or where it enters this track. Degenerate samples are stepped over, so a kinked
+        /// point set with repeated positions still yields a usable heading.
+        /// </summary>
+        public static bool TryHeading(RailTrack track, bool forward, bool leaving, out double x, out double z)
+        {
+            x = 0;
+            z = 0;
+            if (track == null) return false;
+            var pointSet = track.GetKinkedPointSet();
+            if (!Usable(pointSet)) return false;
+            var points = pointSet.points;
+            var last = points.Length - 1;
+            var anchor = leaving == forward ? last : 0;
+            var step = anchor == 0 ? 1 : -1;
+            for (var distance = 1; distance <= 8; distance++)
+            {
+                var other = anchor + step * distance;
+                if (other < 0 || other > last) return false;
+                var near = leaving ? points[other].position : points[anchor].position;
+                var far = leaving ? points[anchor].position : points[other].position;
+                if (!Finite(near) || !Finite(far)) return false;
+                var dx = far.x - near.x;
+                var dz = far.z - near.z;
+                if (!Finite(dx) || !Finite(dz) || (dx == 0 && dz == 0)) continue;
+                x = dx;
+                z = dz;
+                return true;
+            }
+            return false;
+        }
+
         private static void Refine(EquiPointSet.Point[] points, int index, double x, double y, double z,
             ref double bestDistance, ref double bestSpan)
         {

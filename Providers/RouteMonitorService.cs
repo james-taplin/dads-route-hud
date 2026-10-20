@@ -292,14 +292,37 @@ namespace DvMod.HeadsUpDisplay
                     if (junction != null)
                     {
                         var count = junction.outBranches?.Count ?? 0;
-                        var junctionLabel = RouteNaming.SwitchName(
+                        // Approached from the junction's own in-branch the route diverges, so the
+                        // selected branch has a side; approached from a branch it converges instead.
+                        var trailing = junction.inBranch?.track != interval.Track;
+                        var setForRoute = trailing && junction.outBranches != null
+                            && junction.selectedBranch >= 0 && junction.selectedBranch < junction.outBranches.Count
+                            && junction.outBranches[junction.selectedBranch]?.track == interval.Track;
+                        var turn = trailing ? RouteTurnDirection.Unknown
+                            : TurnAt(interval, index + 1 < intervals.Count ? intervals[index + 1] : (RouteInterval<RailTrack>?)null);
+                        var junctionLabel = RouteNaming.SwitchText(
                             NativeTrackNames.StationNameForTrack(interval.Track), junction.name,
-                            junction.selectedBranch, count);
+                            junction.selectedBranch, count, trailing, setForRoute, turn);
                         collectingEvents.Add(new RouteEvent("junction:" + junction.GetInstanceID() + ":encounter:" + index,
-                            interval.EndDistance, RouteEventKind.Junction, junctionLabel, code: junction.name));
+                            interval.EndDistance, RouteEventKind.Junction, junctionLabel,
+                            code: junction.name, marker: RouteTurn.Marker(turn)));
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Which way the route actually turns at the end of an interval, read from the native
+        /// heading where travel leaves this track and where it enters the next. Without a next
+        /// interval the side is not established and is reported as unknown.
+        /// </summary>
+        private static RouteTurnDirection TurnAt(RouteInterval<RailTrack> interval, RouteInterval<RailTrack>? next)
+        {
+            if (!next.HasValue || next.Value.Track == null) return RouteTurnDirection.Unknown;
+            if (!NativeRouteGeometry.TryHeading(interval.Track, interval.Forward, true, out var ax, out var az)
+                || !NativeRouteGeometry.TryHeading(next.Value.Track, next.Value.Forward, false, out var bx, out var bz))
+                return RouteTurnDirection.Unknown;
+            return RouteTurn.Classify(ax, az, bx, bz);
         }
 
         private static bool AtRepeatedEndpoint(RouteWalkBuilder<RailTrack> source, double distance) =>
@@ -428,7 +451,7 @@ namespace DvMod.HeadsUpDisplay
                     freshness = OptionalSignalTelemetry.IsAvailable ? "Local occupancy/reservation observation; " + OptionalSignalTelemetry.Status : "";
                 }
                 events.Add(new RouteEvent(item.Id, item.Distance, item.Kind, item.Label, item.Aspect,
-                    item.ColorHex, fact, freshness, item.AppliesToTravel, item.Code));
+                    item.ColorHex, fact, freshness, item.AppliesToTravel, item.Code, item.Marker));
             }
             foreach (var signal in OptionalSignalTelemetry.UpcomingSignals)
             {

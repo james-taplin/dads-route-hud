@@ -171,8 +171,12 @@ namespace DvMod.HeadsUpDisplay
                 default: return s.showOtherSigns;
             }
         }
-        /// <summary>The row's four columns: distance, what it is, what it says, and the game's code.</summary>
-        public static (string Distance, string Kind, string Description, string Code) EventRow(RouteEvent item)
+        /// <summary>
+        /// The row's columns: distance, what it is, a short marker such as a switch's side, what it
+        /// says, and the game's code. The marker is not escaped because it is one of this mod's own
+        /// fixed tokens, never native text.
+        /// </summary>
+        public static (string Distance, string Kind, string Marker, string Description, string Code) EventRow(RouteEvent item)
         {
             var description = Plain(item.Label);
             foreach (var extra in new[] { item.Aspect, item.Fact })
@@ -181,14 +185,17 @@ namespace DvMod.HeadsUpDisplay
                 if (text.Length > 0) description += "  ·  " + text;
             }
             if (!item.AppliesToTravel) description += "  (opposite direction)";
-            return (Metres(item.Distance), RouteNaming.KindWord(item.Kind), description, Plain(item.Code).Trim());
+            var marker = item.Marker == RouteTurn.LeftMarker || item.Marker == RouteTurn.RightMarker
+                || item.Marker == RouteTurn.AheadMarker ? item.Marker : "";
+            return (Metres(item.Distance), RouteNaming.KindWord(item.Kind), marker, description,
+                Plain(item.Code).Trim());
         }
 
         public static string FormatEvent(RouteEvent item)
         {
             var row = EventRow(item);
-            return row.Distance + "  " + row.Kind + "  " + row.Description
-                + (row.Code.Length == 0 ? "" : "  " + row.Code);
+            return row.Distance + "  " + row.Kind + (row.Marker.Length == 0 ? "" : "  " + row.Marker)
+                + "  " + row.Description + (row.Code.Length == 0 ? "" : "  " + row.Code);
         }
 
         private static void DrawClusters(Rect rect, IReadOnlyList<Cluster> clusters, double start, double end)
