@@ -119,3 +119,11 @@ steam reverser up to a short running cutoff and confirm the direction holds. Sto
 move, set back, and confirm the road behind appears while the train is still rolling forwards. In a
 vehicle with no reverser, confirm clear motion still decides. Confirm the list rebuilds once on a
 real direction change and not repeatedly while shunting.
+
+## One cab supplies direction and position - pending
+
+Double-head two locomotives, drive from one and confirm the trailing locomotive's reverser has no
+effect on the route, in both orientations. Couple a wagon facing the other way, ride in it, and
+confirm the route still runs from the locomotive's end rather than reversing. Walk from the cab
+through the train and back and confirm the list does not empty or rebuild on the way. Leave the cab
+entirely and confirm the route continues from the locomotive last driven.

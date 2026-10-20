@@ -1,7 +1,7 @@
 # Development status
 
-Version 0.3.6 is a test candidate, built, packaged and installed for testing on 20 October 2026,
-as were 0.3.1 to 0.3.5 before it. In-game acceptance of the readable list, the switch markers, the
+Version 0.3.7 is a test candidate, built, packaged and installed for testing on 20 October 2026,
+as were 0.3.1 to 0.3.6 before it. In-game acceptance of the readable list, the switch markers, the
 capture hold and the reverser-led direction is still pending. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
 
 The existing-instance signal-manager lookup performance correction is present. The periodic refresh correction keeps the last valid same-route signal view until its replacement is ready, rather than exposing a temporary native-only catalogue. Changes of route/vehicle/source invalidate old observations. In-game confirmation of the latest publication and GUI behavior remains pending.
@@ -14,7 +14,7 @@ Synthetic in-memory timings are not game performance measurements.
 Publication intentionally starts from the original MIT HUD history with a source-only import. Koteq's compatibility work remains credited. No game DLLs, private settings, backups or local profiling evidence are included. Neither Rinzler's binary nor its implementation is used. See LICENSING.md for pinned notices.
 
 The public repository is behind this checkout: it holds the source import up to 0.2.0, and the
-0.2.1, 0.3.0 and the 0.3.1 to 0.3.6 commits are local only. No tag, release or binary has been published,
+0.2.1, 0.3.0 and the 0.3.1 to 0.3.7 commits are local only. No tag, release or binary has been published,
 and no pull request has been opened upstream. The GitHub default branch therefore does not match
 any installed build.
 
@@ -155,3 +155,22 @@ end it is moving towards. That is the stated intent, not an oversight; making su
 override the lever would be a one-line change if it is wanted.
 
 The decision stays pure and tested, and still retires a capture only when it actually changes.
+
+## One cab supplies direction and position (0.3.7)
+
+Direction, speed and the position anchor are now all taken from a single vehicle: the one the player
+occupies if it has a reverser, otherwise the locomotive they last drove. No other locomotive's lever
+is read, so a trailing engine in a double-headed consist cannot set the route, and a multiple-unit
+arrangement is followed from the cab in use.
+
+This closes a mismatch that mattered more once the reverser led. The reverser was read from the last
+locomotive when the player's own car had none, while the direction of travel was applied to that
+car's orientation and its bogie supplied the position. A player riding in a wagon coupled facing the
+other way would therefore have seen the route from the wrong end. Both now come from the same
+vehicle, so a reverser's direction is always applied to the locomotive it belongs to.
+
+Walking back through the train no longer retires the capture either, because the vehicle the capture
+is anchored to stops changing as the player moves between cars.
+
+This is structural rather than arithmetic, so the pure suites do not cover it; it needs the game and
+a reversed-coupling consist to accept.

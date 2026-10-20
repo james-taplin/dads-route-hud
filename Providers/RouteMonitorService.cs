@@ -85,6 +85,7 @@ namespace DvMod.HeadsUpDisplay
         {
             try
             {
+                car = DrivenCar(car);
                 if (!TryAnchor(car, out var track, out var span, out var forward, out var vehicleForward))
                 {
                     if (IsActive) Reset();
@@ -590,6 +591,23 @@ namespace DvMod.HeadsUpDisplay
             return found && offset + 0.5 >= previous;
         }
 
+        /// <summary>
+        /// The vehicle whose cab the route is taken from: the one the player occupies if it has a
+        /// reverser, otherwise the locomotive they last drove. Direction, speed and the position
+        /// anchor must all come from this one vehicle, because a reverser states a direction
+        /// relative to its own locomotive and a car riding in the same train may be coupled facing
+        /// the other way. It also means walking back through the train does not retire the capture.
+        /// </summary>
+        private static TrainCar? DrivenCar(TrainCar? car)
+        {
+            if (HasReverser(car)) return car;
+            var loco = PlayerManager.LastLoco;
+            return HasReverser(loco) ? loco : car;
+        }
+
+        private static bool HasReverser(TrainCar? car) =>
+            car != null && car.SimController?.controlsOverrider?.Reverser != null;
+
         private static bool TryAnchor(TrainCar? car, out RailTrack track, out double span, out bool forward, out bool vehicleForward)
         {
             track = null!;
@@ -599,8 +617,8 @@ namespace DvMod.HeadsUpDisplay
             if (car == null || car.Bogies == null || car.Bogies.Length == 0) return false;
             var bogie = car.Bogies[Math.Min(1, car.Bogies.Length - 1)];
             if (bogie == null || bogie.track == null || bogie.traveller == null) return false;
-            var controls = car.SimController?.controlsOverrider ?? PlayerManager.LastLoco?.SimController?.controlsOverrider;
-            var reverser = controls?.Reverser?.Value;
+            // This car's own cab only: never another locomotive's lever.
+            var reverser = car.SimController?.controlsOverrider?.Reverser?.Value;
             var speed = car.GetForwardSpeed();
             vehicleForward = RouteDirection.Decide(speed,
                 reverser.HasValue ? reverser.Value - ReverserControl.NEUTRAL_VALUE : (double?)null,

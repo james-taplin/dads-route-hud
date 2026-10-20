@@ -2,7 +2,7 @@
   "Id": "DadsRouteHUD",
   "DisplayName": "Dad's Route HUD",
   "Author": "James; based on Zeibach and Koteq (MIT)",
-  "Version": "0.3.6",
+  "Version": "0.3.7",
   "ManagerVersion": "0.32.4.0",
   "LoadAfter": ["DVCustomCarLoader", "DVSignals", "AITraffic", "DoubleTrack"],
   "AssemblyName": "DadsRouteHUD.dll",
