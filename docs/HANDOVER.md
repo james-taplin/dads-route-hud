@@ -1,7 +1,7 @@
 # Development status
 
-Version 0.3.4 is a test candidate. Versions 0.3.1, 0.3.2 and 0.3.3 were built, packaged and
-installed for testing on 19-20 October 2026; 0.3.4 has been built but not installed or packaged. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
+Version 0.3.4 is a test candidate, built, packaged and installed for testing on 20 October 2026,
+as were 0.3.1, 0.3.2 and 0.3.3 before it. In-game acceptance of 0.3.3 and 0.3.4 is still pending. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
 
 The existing-instance signal-manager lookup performance correction is present. The periodic refresh correction keeps the last valid same-route signal view until its replacement is ready, rather than exposing a temporary native-only catalogue. Changes of route/vehicle/source invalidate old observations. In-game confirmation of the latest publication and GUI behavior remains pending.
 
