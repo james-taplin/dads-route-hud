@@ -1,11 +1,12 @@
 # Development status
 
-Version 0.3.4 is a test candidate, built, packaged and installed for testing on 20 October 2026,
-as were 0.3.1, 0.3.2 and 0.3.3 before it. In-game acceptance of 0.3.3 and 0.3.4 is still pending. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
+Version 0.3.5 is a test candidate, built, packaged and installed for testing on 20 October 2026,
+as were 0.3.1 to 0.3.4 before it. In-game acceptance of the readable list, the switch markers and
+the capture hold is still pending. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
 
 The existing-instance signal-manager lookup performance correction is present. The periodic refresh correction keeps the last valid same-route signal view until its replacement is ready, rather than exposing a temporary native-only catalogue. Changes of route/vehicle/source invalidate old observations. In-game confirmation of the latest publication and GUI behavior remains pending.
 
-Automated checks of the current snapshot: zero-warning installed-reference compilation, 200
+Automated checks of the current snapshot: zero-warning installed-reference compilation, 216
 route/window/layout/naming checks, 14 conversion checks, and 51/51 metadata contracts. Public CI runs the
 two pure suites without proprietary references. Follow VALIDATION.md for actual game acceptance.
 Synthetic in-memory timings are not game performance measurements.
@@ -13,7 +14,7 @@ Synthetic in-memory timings are not game performance measurements.
 Publication intentionally starts from the original MIT HUD history with a source-only import. Koteq's compatibility work remains credited. No game DLLs, private settings, backups or local profiling evidence are included. Neither Rinzler's binary nor its implementation is used. See LICENSING.md for pinned notices.
 
 The public repository is behind this checkout: it holds the source import up to 0.2.0, and the
-0.2.1, 0.3.0, 0.3.1, 0.3.2, 0.3.3 and 0.3.4 commits are local only. No tag, release or binary has been published,
+0.2.1, 0.3.0 and the 0.3.1 to 0.3.5 commits are local only. No tag, release or binary has been published,
 and no pull request has been opened upstream. The GitHub default branch therefore does not match
 any installed build.
 
@@ -108,3 +109,31 @@ engine's handedness: heading north and leaving east is a right turn. Degenerate 
 and a straight reversal, are reported as unknown. Markers are this mod's own fixed tokens, never
 native text, and are the one field not escaped for display. Collection, retention and the existing
 junction event identity are unchanged.
+
+## The list no longer empties while refreshing (0.3.5)
+
+A screen recording of a dead-end yard track showed the route list alternating between the captured
+route and nothing at all, spending most of its time empty. The cause was not the data changing: the
+capture was being retired and rebuilt, and every path that retired it also emptied what was on
+screen, so each rebuild blanked the list until the replacement finished.
+
+Retiring a capture and clearing the display are now separate decisions. Only a change of vehicle,
+of direction of travel, or of the selected look-ahead can empty the list, because only those make
+the previous capture meaningless. While a replacement is collected the last completed capture stays
+on screen, shifted to the live position and marked as retained while refreshing, and is replaced
+atomically when the new capture completes. If the vehicle is no longer on that capture the hold does
+not apply and the partial walk is reported as before, so nothing stale is presented as current.
+
+Two causes of needless rebuilds are also removed. Regenerated native geometry no longer retires the
+capture: the topology is unchanged, so it schedules a fresh capture instead, and it no longer
+restarts a walk that is already running, which previously could prevent any capture from completing.
+A connection mismatch found at the end of collection asks for another capture in the same way. The
+direction of travel is now decided with hysteresis in pure, tested code: measured motion decides
+above 0.5 m/s, an already decided direction is kept below 0.15 m/s, and the reverser decides
+between the two. Previously a vehicle idling either side of a single 0.15 m/s threshold could keep
+changing its reported direction, and each change retired the whole capture.
+
+Each completed capture now records how many captures have been made since loading and what started
+the last one, in the UMM inspector's diagnostics, so a repeated rebuild can be attributed rather
+than guessed at. Collection, retention, naming and the switch markers are unchanged. Which trigger
+caused the recorded loop is not established; the diagnostic exists to establish it.

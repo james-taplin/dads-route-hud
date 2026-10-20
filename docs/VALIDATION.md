@@ -13,7 +13,7 @@ git diff --check
 ./Package.ps1
 ```
 
-Expect zero build warnings/errors, 14 driving checks, 200 route/layout/naming checks and 51 metadata matches. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave parent source, installed HUD/settings and Params.xml unchanged.
+Expect zero build warnings/errors, 14 driving checks, 216 route/layout/naming checks and 51 metadata matches. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave parent source, installed HUD/settings and Params.xml unchanged.
 
 ## Native route acceptance — pending
 
@@ -62,7 +62,7 @@ With the native free cursor, click Detach route, drag and resize the detached gr
 
 ## Three sections and metric columns (0.3.0) - game acceptance pending
 
-The pure suite has 200 checks, including explicit/Auto columns, ordering, empty columns, fold/restore without mutating saved assignments, exact-once retention and shallow tape geometry. In UMM choose Separate all three sections. Verify independent drag/resize, Attach from both detached windows, both main-header actions, overlap/input priority and lock behavior. Set column count 1, 2 and 8, assign and reorder metrics in each, reduce/restore the count, search/filter, and confirm no selection/unit/precision loss. Switch detached metrics between columns and tape: the details window size must stay fixed. Use Top tape / Bottom tape and manually stretch a tape, check scrolling when too short, save/restart, and inspect all three opacities/visibility controls. Route, optional source handling and loop/flicker behavior must remain unchanged with one shared collector.
+The pure suite has 216 checks, including explicit/Auto columns, ordering, empty columns, fold/restore without mutating saved assignments, exact-once retention and shallow tape geometry. In UMM choose Separate all three sections. Verify independent drag/resize, Attach from both detached windows, both main-header actions, overlap/input priority and lock behavior. Set column count 1, 2 and 8, assign and reorder metrics in each, reduce/restore the count, search/filter, and confirm no selection/unit/precision loss. Switch detached metrics between columns and tape: the details window size must stay fixed. Use Top tape / Bottom tape and manually stretch a tape, check scrolling when too short, save/restart, and inspect all three opacities/visibility controls. Route, optional source handling and loop/flicker behavior must remain unchanged with one shared collector.
 
 
 ## Graph fit (0.3.1) - game acceptance pending
@@ -99,3 +99,14 @@ appears and the row reports trailing, with "set for your route" when the switch 
 you are on and "set against you" when it is not. Check both directions of travel over the same
 switch, and a switch immediately at the end of the look-ahead, which must show no marker. Verify the
 marker column disappears entirely when no row has one, and that distances stay aligned.
+
+## Capture hold while refreshing - pending
+
+Stand on a dead-end yard track and watch the route list for a minute: the displayed and retained
+counts must not drop to zero and back. Shunt back and forth across a standstill and confirm the list
+only rebuilds on a real reversal, not while creeping. Drive the main line through several origin
+shifts and confirm the list stays populated throughout. Confirm the status says the previous capture
+is retained while refreshing only while a replacement is collected, and that the new capture replaces
+it in one step. Change locomotive, change the look-ahead, and walk away from the captured route, and
+confirm each of those does clear the list rather than showing a stale one. Read the capture count and
+last rebuild reason in the UMM inspector and report them.

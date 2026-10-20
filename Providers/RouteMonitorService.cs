@@ -28,6 +28,9 @@ namespace DvMod.HeadsUpDisplay
         private static object? displayedSignalSource, displayedTrafficSource;
         private static TrainCar? currentCar;
         private static bool capturedVehicleForward;
+        private static bool directionDecided;
+        private static string rebuildReason = "";
+        private static int rebuildCount;
         private static RouteInterval<RailTrack>? startBoundary;
         private static IReadOnlyList<RouteInterval<RailTrack>> collectionIntervals = Array.Empty<RouteInterval<RailTrack>>();
         private static bool geometryChanged;
@@ -35,6 +38,7 @@ namespace DvMod.HeadsUpDisplay
         private static long signRevision;
         private static double captureOffset;
         private static float nextRefresh;
+        private static bool refreshPending;
         private static float nextPublish;
         private static int topologyCursor;
         private static double? initialElevation;
@@ -62,9 +66,13 @@ namespace DvMod.HeadsUpDisplay
             collectingProblems.Clear();
             eventTracks.Clear();
             currentCar = null;
+            directionDecided = false;
+            rebuildReason = "";
+            rebuildCount = 0;
             initialElevation = null;
             captureOffset = 0;
             geometryChanged = false;
+            refreshPending = false;
             nextRefresh = nextPublish = 0;
             topologyCursor = 0;
             NativeTrackNames.Reset();
@@ -83,25 +91,55 @@ namespace DvMod.HeadsUpDisplay
                     return;
                 }
                 var requested = Main.settings.trackInfoSettings.maxEventSpan;
-                var hardChange = car != currentCar || vehicleForward != capturedVehicleForward || geometryChanged
+                // A different vehicle, a reversal or a new horizon makes the old capture wrong.
+                // Regenerated native geometry does not: the topology is the same, so that only
+                // asks for a fresh capture and must not discard the one on screen.
+                var vehicleChange = car != currentCar || vehicleForward != capturedVehicleForward
                     || (retained != null && requested != retained.RequestedDistance)
                     || (walk != null && requested != walk.RequestedDistance);
-                if (!hardChange && walk == null && retained == null && Time.realtimeSinceStartup < nextRefresh)
-                    return;
+                if (geometryChanged)
+                {
+                    geometryChanged = false;
+                    refreshPending = true;
+                }
+                if (!vehicleChange && !refreshPending && walk == null && retained == null
+                    && Time.realtimeSinceStartup < nextRefresh) return;
                 // One position fix per frame: the publication below reuses this exact result
                 // instead of scanning every captured interval a second time.
                 var located = false;
                 var position = 0d;
-                if (!hardChange && retained != null)
+                var leftRoute = false;
+                if (!vehicleChange && retained != null)
                 {
                     located = TryOffset(retained.Intervals, track, span, forward, captureOffset, out position);
-                    if (!located || !CheckNextConnections(retained.Intervals, 16)) hardChange = true;
+                    if (!located || !CheckNextConnections(retained.Intervals, 16)) leftRoute = true;
                     else captureOffset = position;
                 }
-                if (hardChange || (walk == null && retained == null))
-                    Begin(car!, track, span, forward, vehicleForward, requested, true);
-                else if (walk == null && Time.realtimeSinceStartup >= nextRefresh && !OptionalSignalTelemetry.IsReading)
+                if (vehicleChange || (walk == null && retained == null))
+                {
+                    // Only a vehicle change makes the displayed capture meaningless.
+                    rebuildReason = vehicleChange
+                        ? car != currentCar ? "vehicle changed"
+                            : vehicleForward != capturedVehicleForward ? "direction of travel changed"
+                            : "selected look-ahead changed"
+                        : "first capture";
+                    Begin(car!, track, span, forward, vehicleForward, requested, true, vehicleChange);
+                    refreshPending = false;
+                }
+                else if (leftRoute)
+                {
+                    rebuildReason = located ? "route ahead no longer matches the game's connections"
+                        : "vehicle is no longer on the captured route";
+                    Begin(car!, track, span, forward, vehicleForward, requested, true, false);
+                    refreshPending = false;
+                }
+                else if (walk == null && (refreshPending || Time.realtimeSinceStartup >= nextRefresh)
+                    && !OptionalSignalTelemetry.IsReading)
+                {
+                    rebuildReason = refreshPending ? "native geometry regenerated" : "scheduled refresh";
                     Begin(car!, track, span, forward, vehicleForward, requested, false);
+                    refreshPending = false;
+                }
 
                 frameTimer.Restart();
                 while (walk != null && !walk.IsComplete && frameTimer.Elapsed.TotalMilliseconds < 2)
@@ -169,6 +207,18 @@ namespace DvMod.HeadsUpDisplay
                 }
                 else if (walk != null && Time.realtimeSinceStartup >= nextPublish)
                 {
+                    // While a replacement is being collected, keep showing the last completed
+                    // capture rather than emptying the list, as long as the vehicle is still on
+                    // it. A partial walk is only shown when there is nothing better to show.
+                    var held = display.Capture;
+                    if (held != null && held.Events.Count > 0
+                        && TryOffset(held.Intervals, track, span, forward, displayOffset, out var heldOffset))
+                    {
+                        displayOffset = heldOffset;
+                        Current = RouteSnapshotView.Shift(Rebuilding(held), displayOffset);
+                        nextPublish = Time.realtimeSinceStartup + 0.25f;
+                        return;
+                    }
                     var partial = new RouteSnapshot<RailTrack>(revision, walk.RequestedDistance, walk.ReachedDistance,
                         walk.Termination, IncludeStartBoundary(walk.Intervals), collectingEvents, collectingProfile, true,
                         collection == null ? "Walking native selected route; event collection pending"
@@ -203,8 +253,13 @@ namespace DvMod.HeadsUpDisplay
             }
         }
 
+        /// <summary>
+        /// Starts a capture. <paramref name="discardPrevious"/> retires the retained capture;
+        /// <paramref name="clearDisplay"/> additionally drops what is on screen, which is only
+        /// right when the previous capture can no longer describe this vehicle's route.
+        /// </summary>
         private static void Begin(TrainCar car, RailTrack track, double span, bool forward, bool vehicleForward,
-            double requested, bool discardPrevious)
+            double requested, bool discardPrevious, bool clearDisplay = true)
         {
             collection?.Dispose();
             collection = null;
@@ -215,17 +270,22 @@ namespace DvMod.HeadsUpDisplay
             if (discardPrevious)
             {
                 retained = null;
-                display.Clear();
                 signalPublicationPending = false;
-                displayOffset = 0;
                 displayedSignalSource = displayedTrafficSource = null;
                 eventTracks.Clear();
                 captureOffset = 0;
                 OptionalSignalTelemetry.Reset();
-                Current = RouteSnapshot<RailTrack>.Empty(requested);
+                if (clearDisplay)
+                {
+                    display.Clear();
+                    displayOffset = 0;
+                    Current = RouteSnapshot<RailTrack>.Empty(requested);
+                }
             }
             currentCar = car;
             capturedVehicleForward = vehicleForward;
+            directionDecided = true;
+            rebuildCount++;
             startBoundary = graph.TryGetLength(track, out var length) && length > 0 && span == (forward ? length : 0)
                 ? new RouteInterval<RailTrack>(track, forward, span, span, 0, 0) : (RouteInterval<RailTrack>?)null;
             collectionIntervals = Array.Empty<RouteInterval<RailTrack>>();
@@ -352,15 +412,19 @@ namespace DvMod.HeadsUpDisplay
             if (walk == null) return;
             if (!CheckAllConnections(collectionIntervals))
             {
-                geometryChanged = true;
+                // The route changed under the capture. Ask for another one, and leave whatever is
+                // on screen alone: the publication path decides whether it still applies.
+                refreshPending = true;
                 retained = null;
                 walk = null;
-                Current = RouteSnapshot<RailTrack>.Empty(Main.settings.trackInfoSettings.maxEventSpan);
                 return;
             }
             var ending = DescribeShortRoute(walk);
-            var diagnostics = ending == null ? collectingProblems.AsEnumerable()
-                : new[] { ending }.Concat(collectingProblems);
+            // A list that keeps emptying is a rebuild loop; name the cause rather than guess it.
+            var captures = "Capture " + rebuildCount.ToString(CultureInfo.InvariantCulture)
+                + " since loading" + (rebuildReason.Length == 0 ? "" : "; last started by " + rebuildReason);
+            var diagnostics = (ending == null ? collectingProblems.AsEnumerable()
+                : new[] { ending }.Concat(collectingProblems)).Concat(new[] { captures });
             retained = new RouteSnapshot<RailTrack>(revision, walk.RequestedDistance, walk.ReachedDistance,
                 walk.Termination, collectionIntervals, collectingEvents, collectingProfile, false,
                 NativeRouteSignIndex.Coverage, "Optional signals pending sample",
@@ -437,6 +501,17 @@ namespace DvMod.HeadsUpDisplay
 
         private static string Metres(double value) =>
             value.ToString("N0", CultureInfo.InvariantCulture) + " m";
+
+        /// <summary>Marks a completed capture that is being shown while its replacement is collected.</summary>
+        private static RouteSnapshot<RailTrack> Rebuilding(RouteSnapshot<RailTrack> source)
+        {
+            const string note = "previous capture retained while refreshing";
+            if (source.EventCoverage.IndexOf(note, StringComparison.OrdinalIgnoreCase) >= 0) return source;
+            return new RouteSnapshot<RailTrack>(source.Revision, source.RequestedDistance, source.ReachedDistance,
+                source.Termination, source.Intervals, source.Events, source.Profile, true,
+                source.EventCoverage.Length == 0 ? note : source.EventCoverage + "; " + note,
+                source.SignalCoverage, source.Diagnostics, source.UpdatedAtUtc, alreadySorted: true);
+        }
 
         private static RouteSnapshot<RailTrack> MergeOptional(RouteSnapshot<RailTrack> source)
         {
@@ -527,9 +602,9 @@ namespace DvMod.HeadsUpDisplay
             var controls = car.SimController?.controlsOverrider ?? PlayerManager.LastLoco?.SimController?.controlsOverrider;
             var reverser = controls?.Reverser?.Value;
             var speed = car.GetForwardSpeed();
-            vehicleForward = Math.Abs(speed) > 0.15f ? speed > 0
-                : reverser.HasValue && Math.Abs(reverser.Value - ReverserControl.NEUTRAL_VALUE) > 0.001
-                    ? reverser.Value > ReverserControl.NEUTRAL_VALUE : true;
+            vehicleForward = RouteDirection.Decide(speed,
+                reverser.HasValue ? reverser.Value - ReverserControl.NEUTRAL_VALUE : (double?)null,
+                directionDecided, capturedVehicleForward);
             track = bogie.track;
             span = bogie.traveller.Span;
             forward = vehicleForward == (bogie.TrackDirectionSign > 0);

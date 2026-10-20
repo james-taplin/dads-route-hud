@@ -39,6 +39,7 @@ internal static class RouteCoreProgram
         FittedRouteGraph();
         ReadableNames();
         SwitchSides();
+        StickyDirection();
         SyntheticTiming();
         Console.WriteLine(checks + " route-core checks passed.");
     }
@@ -138,6 +139,30 @@ internal static class RouteCoreProgram
             RouteWalkTermination.HorizonReached, Array.Empty<RouteInterval<string>>(), new[] { marked },
             Array.Empty<RouteProfilePoint>(), false, "", ""), 5);
         Check(shifted.Events.Single().Marker == ">>>", "The marker survives a shifted view");
+    }
+
+    /// <summary>
+    /// The direction of travel must not flap while shunting: each change retires a whole capture,
+    /// which is what empties the list on screen.
+    /// </summary>
+    private static void StickyDirection()
+    {
+        Check(RouteDirection.Decide(3, null, false, false), "Clear forward motion reads as forward");
+        Check(!RouteDirection.Decide(-3, null, false, true), "Clear reverse motion reads as reverse");
+        Check(RouteDirection.Decide(2, -1, true, false), "Measured motion outweighs the reverser");
+
+        // The band either side of a standstill is where the old threshold kept changing its mind.
+        foreach (var creep in new[] { 0.0, 0.05, -0.05, 0.1, -0.149 })
+            Check(RouteDirection.Decide(creep, null, true, true) && !RouteDirection.Decide(creep, null, true, false),
+                "A decided direction survives a creep at " + creep);
+        foreach (var crawl in new[] { 0.2, -0.2, 0.49, -0.49 })
+            Check(RouteDirection.Decide(crawl, 0.4, true, false) && !RouteDirection.Decide(crawl, -0.4, true, true),
+                "Between the thresholds the reverser decides at " + crawl);
+        Check(RouteDirection.Decide(0.3, 0, true, true) && !RouteDirection.Decide(0.3, 0, true, false),
+            "A neutral reverser leaves the decision standing");
+        Check(RouteDirection.Decide(0.3, null, false, false), "With nothing decided and no reverser, forward");
+        Check(RouteDirection.Decide(double.NaN, -1, true, true), "Unusable speed keeps the decision");
+        Check(!RouteDirection.Decide(-0.6, 1, true, true), "A real reversal is still reported");
     }
 
     private static void FittedRouteGraph()
