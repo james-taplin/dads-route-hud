@@ -4,32 +4,38 @@ namespace DvMod.HeadsUpDisplay
 {
     /// <summary>
     /// Decides which way a vehicle is travelling, for the purpose of choosing the route ahead.
-    /// Pure, and deliberately sticky: changing this answer retires an entire capture, so a
-    /// vehicle idling either side of a threshold must not keep changing it.
+    /// The reverser leads: it states the direction the driver has selected, so the road shown is
+    /// the one about to be taken, including before the train moves and while it is still rolling
+    /// the other way after a stop. Pure, and deliberately sticky, because changing this answer
+    /// retires an entire capture.
     /// </summary>
     public static class RouteDirection
     {
-        /// <summary>Above this speed the measured direction of travel is decisive.</summary>
-        public const double ReversalSpeed = 0.5;
+        /// <summary>
+        /// How far the reverser must sit from neutral to state a direction, in the control's own
+        /// units, where full gear is 0.5 either side of neutral. A steam reverser's distance from
+        /// neutral is its cutoff, and normal running cutoffs are well beyond this, so only
+        /// mid-gear and lever float fall inside it.
+        /// </summary>
+        public const double NeutralBand = 0.05;
 
-        /// <summary>Below this speed an already decided direction is kept whatever the controls say.</summary>
-        public const double HoldSpeed = 0.15;
+        /// <summary>With the reverser saying nothing, motion above this speed decides instead.</summary>
+        public const double MotionSpeed = 0.5;
 
         /// <summary>
-        /// Measured motion wins above the reversal speed. Below the hold speed a direction already
-        /// decided is kept. Between the two, a reverser away from neutral decides; otherwise the
-        /// previous answer stands, and with nothing at all to go on the vehicle reads as forward.
+        /// The reverser decides whenever it is away from neutral. At or near neutral the lever
+        /// states nothing, so clear motion decides; failing that the previous answer stands, and
+        /// with nothing at all to go on the vehicle reads as forward.
         /// </summary>
         public static bool Decide(double speed, double? reverserFromNeutral, bool decided, bool previous)
         {
-            if (double.IsNaN(speed) || double.IsInfinity(speed)) return decided ? previous : true;
-            var magnitude = Math.Abs(speed);
-            if (magnitude > ReversalSpeed) return speed > 0;
-            if (decided && magnitude < HoldSpeed) return previous;
-            if (reverserFromNeutral.HasValue && !double.IsNaN(reverserFromNeutral.Value)
-                && Math.Abs(reverserFromNeutral.Value) > 0.001)
+            if (reverserFromNeutral.HasValue && Finite(reverserFromNeutral.Value)
+                && Math.Abs(reverserFromNeutral.Value) > NeutralBand)
                 return reverserFromNeutral.Value > 0;
+            if (Finite(speed) && Math.Abs(speed) > MotionSpeed) return speed > 0;
             return decided ? previous : true;
         }
+
+        private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     }
 }

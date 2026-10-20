@@ -142,27 +142,41 @@ internal static class RouteCoreProgram
     }
 
     /// <summary>
-    /// The direction of travel must not flap while shunting: each change retires a whole capture,
-    /// which is what empties the list on screen.
+    /// The reverser states the selected direction, so it leads; motion only decides when the lever
+    /// is at neutral. The answer must also be sticky, because each change retires a whole capture.
     /// </summary>
     private static void StickyDirection()
     {
-        Check(RouteDirection.Decide(3, null, false, false), "Clear forward motion reads as forward");
-        Check(!RouteDirection.Decide(-3, null, false, true), "Clear reverse motion reads as reverse");
-        Check(RouteDirection.Decide(2, -1, true, false), "Measured motion outweighs the reverser");
+        // Full gear either way, and a short running cutoff, all state a direction.
+        foreach (var cutoff in new[] { 0.5, 0.2, 0.1, 0.06 })
+            Check(RouteDirection.Decide(0, cutoff, false, false) && !RouteDirection.Decide(0, -cutoff, false, true),
+                "The reverser states the direction at " + cutoff);
 
-        // The band either side of a standstill is where the old threshold kept changing its mind.
-        foreach (var creep in new[] { 0.0, 0.05, -0.05, 0.1, -0.149 })
-            Check(RouteDirection.Decide(creep, null, true, true) && !RouteDirection.Decide(creep, null, true, false),
+        // The lever leads even when the train is still rolling the other way after a stop.
+        Check(!RouteDirection.Decide(3, -0.4, true, true), "A reverser set back wins over forward roll");
+        Check(RouteDirection.Decide(-3, 0.4, true, false), "A reverser set forward wins over reverse roll");
+        Check(RouteDirection.Decide(0, 0.4, false, false), "A standing train shows the road it will take");
+
+        // Mid-gear and lever float state nothing, so motion decides.
+        foreach (var midGear in new[] { 0.0, 0.05, -0.05, 0.01 })
+        {
+            Check(RouteDirection.Decide(3, midGear, true, false), "Near neutral, forward motion decides at " + midGear);
+            Check(!RouteDirection.Decide(-3, midGear, true, true), "Near neutral, reverse motion decides at " + midGear);
+        }
+
+        // Neither says anything: the previous answer must stand rather than flap while shunting.
+        foreach (var creep in new[] { 0.0, 0.2, -0.2, 0.49, -0.49 })
+            Check(RouteDirection.Decide(creep, 0, true, true) && !RouteDirection.Decide(creep, 0, true, false),
                 "A decided direction survives a creep at " + creep);
-        foreach (var crawl in new[] { 0.2, -0.2, 0.49, -0.49 })
-            Check(RouteDirection.Decide(crawl, 0.4, true, false) && !RouteDirection.Decide(crawl, -0.4, true, true),
-                "Between the thresholds the reverser decides at " + crawl);
-        Check(RouteDirection.Decide(0.3, 0, true, true) && !RouteDirection.Decide(0.3, 0, true, false),
-            "A neutral reverser leaves the decision standing");
-        Check(RouteDirection.Decide(0.3, null, false, false), "With nothing decided and no reverser, forward");
-        Check(RouteDirection.Decide(double.NaN, -1, true, true), "Unusable speed keeps the decision");
-        Check(!RouteDirection.Decide(-0.6, 1, true, true), "A real reversal is still reported");
+
+        Check(RouteDirection.Decide(0.1, null, true, true) && !RouteDirection.Decide(0.1, null, true, false),
+            "Without a reverser a slow vehicle keeps its decision");
+        Check(RouteDirection.Decide(3, null, false, false) && !RouteDirection.Decide(-3, null, false, true),
+            "Without a reverser clear motion still decides");
+        Check(RouteDirection.Decide(0, null, false, false), "With nothing to go on at all, forward");
+        Check(RouteDirection.Decide(double.NaN, null, true, true)
+            && !RouteDirection.Decide(double.NaN, double.NaN, true, false),
+            "Unusable inputs keep the decision");
     }
 
     private static void FittedRouteGraph()

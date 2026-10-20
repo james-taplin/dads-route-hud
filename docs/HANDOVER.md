@@ -1,12 +1,12 @@
 # Development status
 
-Version 0.3.5 is a test candidate, built, packaged and installed for testing on 20 October 2026,
-as were 0.3.1 to 0.3.4 before it. In-game acceptance of the readable list, the switch markers and
-the capture hold is still pending. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
+Version 0.3.6 is a test candidate, built, packaged and installed for testing on 20 October 2026,
+as were 0.3.1 to 0.3.5 before it. In-game acceptance of the readable list, the switch markers, the
+capture hold and the reverser-led direction is still pending. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
 
 The existing-instance signal-manager lookup performance correction is present. The periodic refresh correction keeps the last valid same-route signal view until its replacement is ready, rather than exposing a temporary native-only catalogue. Changes of route/vehicle/source invalidate old observations. In-game confirmation of the latest publication and GUI behavior remains pending.
 
-Automated checks of the current snapshot: zero-warning installed-reference compilation, 216
+Automated checks of the current snapshot: zero-warning installed-reference compilation, 224
 route/window/layout/naming checks, 14 conversion checks, and 51/51 metadata contracts. Public CI runs the
 two pure suites without proprietary references. Follow VALIDATION.md for actual game acceptance.
 Synthetic in-memory timings are not game performance measurements.
@@ -14,7 +14,7 @@ Synthetic in-memory timings are not game performance measurements.
 Publication intentionally starts from the original MIT HUD history with a source-only import. Koteq's compatibility work remains credited. No game DLLs, private settings, backups or local profiling evidence are included. Neither Rinzler's binary nor its implementation is used. See LICENSING.md for pinned notices.
 
 The public repository is behind this checkout: it holds the source import up to 0.2.0, and the
-0.2.1, 0.3.0 and the 0.3.1 to 0.3.5 commits are local only. No tag, release or binary has been published,
+0.2.1, 0.3.0 and the 0.3.1 to 0.3.6 commits are local only. No tag, release or binary has been published,
 and no pull request has been opened upstream. The GitHub default branch therefore does not match
 any installed build.
 
@@ -137,3 +137,21 @@ Each completed capture now records how many captures have been made since loadin
 the last one, in the UMM inspector's diagnostics, so a repeated rebuild can be attributed rather
 than guessed at. Collection, retention, naming and the switch markers are unchanged. Which trigger
 caused the recorded loop is not established; the diagnostic exists to establish it.
+
+## Direction of travel follows the reverser (0.3.6)
+
+The route shown is now the road the reverser has selected, not the one the vehicle happens to be
+moving along. The reverser decides whenever it sits more than 0.05 from neutral in the control's own
+units, where full gear is 0.5 either side; a steam reverser's distance from neutral is its cutoff,
+so every normal running cutoff states a direction and only mid-gear and lever float do not. At or
+near neutral the lever states nothing and motion above 0.5 m/s decides instead; failing both, the
+previous answer stands.
+
+This means the road ahead changes as soon as the reverser is set, before the train moves, and it
+stays correct while the train is still rolling the other way after a stop, which is the usual case
+when shunting. It also means that a vehicle rolling against its reverser, such as running back down
+a grade or being propelled by another locomotive, shows the end the reverser selects rather than the
+end it is moving towards. That is the stated intent, not an oversight; making sustained motion
+override the lever would be a one-line change if it is wanted.
+
+The decision stays pure and tested, and still retires a capture only when it actually changes.
