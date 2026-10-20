@@ -49,7 +49,8 @@ namespace DvMod.HeadsUpDisplay
             }
             var ev = Event.current;
             var id = GUIUtility.GetControlID(FocusType.Passive);
-            var headerHeight = Styles.noWrapBold.fontSize + 14;
+            var pad = Styles.Padding;
+            var headerHeight = Styles.noWrapBold.fontSize + pad * 2 + 4;
             var secondRow = !string.IsNullOrEmpty(secondActionLabel);
             var titleHeight = headerHeight;
             if (secondRow) headerHeight += titleHeight;
@@ -58,16 +59,17 @@ namespace DvMod.HeadsUpDisplay
             var fontSize = Styles.noWrapBold.fontSize;
             var actionWidth = string.IsNullOrEmpty(actionLabel) ? 0 : Mathf.Min(frameRect.width - fontSize * 3,
                 Mathf.Max(fontSize * 3, Styles.ButtonWidth(actionLabel)));
-            var actionRect = new Rect(frameRect.xMax - actionWidth - 6, frameRect.y + 3, actionWidth, headerHeight - 6);
+            var actionRect = new Rect(frameRect.xMax - actionWidth - pad, frameRect.y + pad / 2 + 1,
+                actionWidth, headerHeight - pad - 2);
             var secondRect = new Rect();
             if (secondRow)
             {
                 // Two actions sit on their own row, each no wider than it needs, centred together.
                 var gap = Mathf.Max(4, fontSize / 2);
                 var widest = Mathf.Max(Styles.ButtonWidth(actionLabel), Styles.ButtonWidth(secondActionLabel));
-                actionWidth = Mathf.Min(widest, Mathf.Max(fontSize * 3, (frameRect.width - gap - 16) / 2));
-                var left = frameRect.x + Mathf.Max(8, (frameRect.width - (actionWidth * 2 + gap)) / 2);
-                actionRect = new Rect(left, frameRect.y + titleHeight + 1, actionWidth, titleHeight - 6);
+                actionWidth = Mathf.Min(widest, Mathf.Max(fontSize * 3, (frameRect.width - gap - pad * 2) / 2));
+                var left = frameRect.x + Mathf.Max(pad, (frameRect.width - (actionWidth * 2 + gap)) / 2);
+                actionRect = new Rect(left, frameRect.y + titleHeight + 1, actionWidth, titleHeight - pad - 2);
                 secondRect = new Rect(actionRect.xMax + gap, actionRect.y, actionWidth, actionRect.height);
             }
             var mouseFree = Cursor.visible && Cursor.lockState != CursorLockMode.Locked;
@@ -110,7 +112,8 @@ namespace DvMod.HeadsUpDisplay
                 GUI.color = new Color(0.025f, 0.035f, 0.045f, background);
                 if (ev.type == EventType.Repaint) GUI.DrawTexture(frameRect, Texture2D.whiteTexture);
                 GUI.color = new Color(1, 1, 1, content);
-                GUI.Label(new Rect(frameRect.x + 10, frameRect.y + 4, Mathf.Max(1, frameRect.width - (secondRow ? 20 : actionWidth + 28)), titleHeight - 4),
+                GUI.Label(new Rect(frameRect.x + pad + 2, frameRect.y + pad,
+                        Mathf.Max(1, frameRect.width - (secondRow ? pad * 2 + 4 : actionWidth + pad * 2 + 8)), titleHeight - pad),
                     title + (locked ? "  [locked]" : "  [drag header]"), Styles.noWrapBold);
                 if (!locked) GUI.Label(new Rect(frameRect.xMax - 19, frameRect.yMax - 21, 19, 20), "↘", Styles.noWrapBold);
                 // The action is outside the scroll view and the drag hit area. Keep it usable when geometry is locked.
@@ -121,9 +124,10 @@ namespace DvMod.HeadsUpDisplay
                     headerAction?.Invoke();
                 if (secondRow && GUI.Button(secondRect, secondActionLabel, Styles.button)) secondAction?.Invoke();
                 GUI.enabled = savedEnabled;
-                var bodyHeight = Mathf.Max(1, frameRect.height - headerHeight - 16);
-                GUILayout.BeginArea(new Rect(frameRect.x + 8, frameRect.y + headerHeight, Mathf.Max(1, frameRect.width - 16), bodyHeight));
-                scroll = GUILayout.BeginScrollView(scroll, GUILayout.Width(Mathf.Max(1, frameRect.width - 16)), GUILayout.Height(bodyHeight));
+                var bodyHeight = Mathf.Max(1, frameRect.height - headerHeight - pad * 2);
+                var bodyWidth = Mathf.Max(1, frameRect.width - pad * 2);
+                GUILayout.BeginArea(new Rect(frameRect.x + pad, frameRect.y + headerHeight, bodyWidth, bodyHeight));
+                scroll = GUILayout.BeginScrollView(scroll, GUILayout.Width(bodyWidth), GUILayout.Height(bodyHeight));
                 drawContent();
                 GUILayout.EndScrollView();
                 GUILayout.EndArea();

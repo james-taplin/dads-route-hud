@@ -1,7 +1,7 @@
 # Development status
 
-Version 0.4.0 is a test candidate, built, packaged and installed for testing on 20 October 2026,
-as were 0.3.1 to 0.3.9 before it. In-game acceptance of the readable list, the switch markers, the
+Version 0.4.1 is a test candidate, built, packaged and installed for testing on 20 October 2026,
+as were 0.3.1 to 0.4.0 before it. In-game acceptance of the readable list, the switch markers, the
 capture hold and the reverser-led direction is still pending. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
 
 The existing-instance signal-manager lookup performance correction is present. The periodic refresh correction keeps the last valid same-route signal view until its replacement is ready, rather than exposing a temporary native-only catalogue. Changes of route/vehicle/source invalidate old observations. In-game confirmation of the latest publication and GUI behavior remains pending.
@@ -14,7 +14,7 @@ Synthetic in-memory timings are not game performance measurements.
 Publication intentionally starts from the original MIT HUD history with a source-only import. Koteq's compatibility work remains credited. No game DLLs, private settings, backups or local profiling evidence are included. Neither Rinzler's binary nor its implementation is used. See LICENSING.md for pinned notices.
 
 The public repository is behind this checkout: it holds the source import up to 0.2.0, and the
-0.2.1, 0.3.0 and the 0.3.1 to 0.4.0 commits are local only. No tag, release or binary has been published,
+0.2.1, 0.3.0 and the 0.3.1 to 0.4.1 commits are local only. No tag, release or binary has been published,
 and no pull request has been opened upstream. The GitHub default branch therefore does not match
 any installed build.
 
@@ -239,3 +239,23 @@ metric is placed exactly once at one, three, six and eight columns.
 
 The settings panel's own group filter still uses its older Controls/Steam/Performance/Vehicle sets;
 those two taxonomies have not been unified.
+
+## Window padding is a setting (0.4.1)
+
+The space between a window's frame and its content was a set of fixed figures scattered through the
+window code: fourteen pixels of header, ten and four at the title, eight at each side of the body,
+sixteen at the bottom, and a width allowance of thirty-eight. None of them moved with the font, so a
+small font left a lot of empty frame around very little text.
+
+Window padding is now a single UMM setting of nought to sixteen pixels, defaulting to four, and
+every one of those insets follows it: header height, title inset, body area, and the width a window
+loses to its own frame. The gap between columns follows it too, instead of a fixed ten. The width
+allowance keeps a fixed twenty-two pixels on top of the padding for the scroll bar and the resize
+grip, which exist whatever the padding is, so the grip stays usable at nought.
+
+The previous appearance was equivalent to a padding of eight, so the default of four closes the
+windows in on their content noticeably without any change of setting. This affects all three
+windows, not only the detached ones, since they share the same window code.
+
+This is a visual change with no arithmetic to pin down, so the pure suites do not cover it. It needs
+the game to accept.

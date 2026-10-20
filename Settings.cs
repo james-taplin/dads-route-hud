@@ -399,6 +399,8 @@ namespace DvMod.HeadsUpDisplay
             public float graphBackgroundOpacity = 0.72f;
             public float graphContentOpacity = 1f;
             public int profileHeight = 50;
+            /// <summary>Space between a window's frame and its content, in pixels.</summary>
+            public int windowPadding = 4;
             public bool showRouteStatus = true;
             public bool showNearProfile;
             public bool showOverview = true;
@@ -494,6 +496,7 @@ namespace DvMod.HeadsUpDisplay
             if (layoutSettings.popOutGraph)
                 layoutSettings.showGraphWindow = GUILayout.Toggle(layoutSettings.showGraphWindow, "Show separate route window");
             UnityModManager.UI.DrawIntField(ref layoutSettings.fontSize, "Font size (10-28)");
+            UnityModManager.UI.DrawIntField(ref layoutSettings.windowPadding, "Window padding (0-16)");
             if (layoutSettings.popOutMetrics) WindowSize("Route list / train details", ref detailsSize);
             else if (layoutSettings.displayMode == LayoutSettings.DisplayMode.Compact) WindowSize("Compact HUD", ref compactSize);
             else WindowSize("Driving strip", ref hudSize);
@@ -608,6 +611,7 @@ namespace DvMod.HeadsUpDisplay
             layoutSettings.nearDistance = Mathf.Clamp(layoutSettings.nearDistance, 250, 10000);
             layoutSettings.inspectorPageSize = Mathf.Clamp(layoutSettings.inspectorPageSize, 10, 100);
             layoutSettings.profileHeight = Mathf.Clamp(layoutSettings.profileHeight, 20, 300);
+            layoutSettings.windowPadding = Mathf.Clamp(layoutSettings.windowPadding, 0, 16);
             if (!Enum.IsDefined(typeof(LayoutSettings.DisplayMode), layoutSettings.displayMode)) layoutSettings.displayMode = LayoutSettings.DisplayMode.DrivingStrip;
             if (!Enum.IsDefined(typeof(LayoutSettings.RouteDisplay), layoutSettings.routeDisplay)) layoutSettings.routeDisplay = LayoutSettings.RouteDisplay.Graph;
             layoutSettings.backgroundOpacity = Mathf.Clamp01(layoutSettings.backgroundOpacity);

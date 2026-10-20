@@ -153,3 +153,12 @@ columns and confirm neighbouring groups merge in order with nothing lost, then t
 the full reading order. Raise to eight and confirm the spare columns stay empty rather than padded.
 Set a metric explicitly to a column and confirm it moves there and stays when the count changes.
 Check a diesel and a steam locomotive, and a vehicle with native ports enabled.
+
+## Window padding - pending
+
+Set window padding to 0, 4, 8 and 16 and confirm each window's frame closes in on its content by the
+same amount at the top, sides and bottom, with no text clipped and the title still readable. At 0
+confirm the resize grip and the scroll bar are still usable and do not sit on top of the content.
+Confirm the graph fills the extra width rather than leaving a gap, that the metrics tape and the
+route list columns tighten with it, and that the detached windows can still be dragged by their
+headers. Check at font 10 and 28.

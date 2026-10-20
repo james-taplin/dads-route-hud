@@ -3,7 +3,7 @@
     <TargetFramework>net48</TargetFramework>
     <AssemblyName>DadsRouteHUD</AssemblyName>
     <RootNamespace>DvMod.HeadsUpDisplay</RootNamespace>
-    <Version>0.4.0</Version>
+    <Version>0.4.1</Version>
     <LangVersion>8.0</LangVersion>
     <CodePage>65001</CodePage>
     <Nullable>enable</Nullable>

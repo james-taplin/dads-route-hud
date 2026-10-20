@@ -21,6 +21,19 @@ namespace DvMod.HeadsUpDisplay
         public static readonly GUIStyle button;
         private static readonly GUIContent measurement = new GUIContent();
         private static int appliedFontSize;
+        private static int appliedPadding = -1;
+
+        /// <summary>Space between a window's frame and its content, and the unit other gaps follow.</summary>
+        public static int Padding { get; private set; } = 4;
+
+        /// <summary>
+        /// Width a window loses to its own frame: padding on both sides, plus room for the
+        /// scroll bar and the resize grip, which exist whatever the padding is.
+        /// </summary>
+        public static float ContentInset => Padding * 2 + 22;
+
+        /// <summary>The gap between columns, following the padding rather than a fixed figure.</summary>
+        public static int ColumnGap => Mathf.Max(3, Padding + 2);
 
         static Styles()
         {
@@ -36,10 +49,12 @@ namespace DvMod.HeadsUpDisplay
             button = new GUIStyle(GUI.skin.button) { wordWrap = false, alignment = TextAnchor.MiddleCenter };
         }
 
-        public static void SetFontSize(int fontSize)
+        public static void SetFontSize(int fontSize, int padding)
         {
-            if (appliedFontSize == fontSize) return;
+            Padding = Mathf.Clamp(padding, 0, 16);
+            if (appliedFontSize == fontSize && appliedPadding == Padding) return;
             appliedFontSize = fontSize;
+            appliedPadding = Padding;
             foreach (var style in new[] { noWrap, noWrapBold, centeredBold, rightAlign, richText })
             {
                 style.fontSize = fontSize;
@@ -70,7 +85,7 @@ namespace DvMod.HeadsUpDisplay
 
     public class Overlay : MonoBehaviour
     {
-        public const int ColumnSpacing = 10;
+        public static int ColumnSpacing => Styles.ColumnGap;
         public static Overlay? instance;
         private readonly HudWindow mainWindow = new HudWindow(320);
         private readonly HudWindow graphWindow = new HudWindow(400);
@@ -195,10 +210,10 @@ namespace DvMod.HeadsUpDisplay
                 settings.placeMetricsTopRight = false;
                 Main.RequestSettingsSave();
             }
-            innerWidth = Math.Max(1, mainRect.width - 38);
-            metricsWidth = Math.Max(1, (layout.popOutMetrics ? metricsRect.width : mainRect.width) - 38);
+            innerWidth = Math.Max(1, mainRect.width - Styles.ContentInset);
+            metricsWidth = Math.Max(1, (layout.popOutMetrics ? metricsRect.width : mainRect.width) - Styles.ContentInset);
             fontSize = layout.fontSize;
-            Styles.SetFontSize(fontSize);
+            Styles.SetFontSize(fontSize, layout.windowPadding);
             background = layout.backgroundOpacity; content = layout.contentOpacity;
             graphBackground = layout.graphBackgroundOpacity; graphContent = layout.graphContentOpacity;
             metricsBackground = layout.metricsBackgroundOpacity; metricsContent = layout.metricsContentOpacity;
@@ -219,7 +234,8 @@ namespace DvMod.HeadsUpDisplay
             CopyTrainSettings();
             summary = BuildTrainSummary();
             if (dockGraph || showGraph)
-                RouteMonitor.PrepareLayout(RouteMonitorService.Current, showGraph ? graphRect.width - 38 : innerWidth, fontSize, layout);
+                RouteMonitor.PrepareLayout(RouteMonitorService.Current,
+                    showGraph ? graphRect.width - Styles.ContentInset : innerWidth, fontSize, layout);
             if (showEvents)
             {
                 var visible = RouteMonitorService.Current.Events.Where(RouteMonitor.IsVisible).ToArray();
