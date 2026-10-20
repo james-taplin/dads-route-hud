@@ -22,7 +22,7 @@ namespace DvMod.HeadsUpDisplay
             {
                 if (item.Distance < offset) continue;
                 events.Add(new RouteEvent(item.Id, item.Distance - offset, item.Kind, item.Label,
-                    item.Aspect, item.ColorHex, item.Fact, item.Freshness, item.AppliesToTravel));
+                    item.Aspect, item.ColorHex, item.Fact, item.Freshness, item.AppliesToTravel, item.Code));
             }
 
             var intervals = new List<RouteInterval<TTrack>>();

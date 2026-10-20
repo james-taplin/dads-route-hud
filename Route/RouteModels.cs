@@ -18,10 +18,12 @@ namespace DvMod.HeadsUpDisplay
         public string Fact { get; }
         public string Freshness { get; }
         public bool AppliesToTravel { get; }
+        /// <summary>The game's own short identifier, kept so a row still matches job overviews.</summary>
+        public string Code { get; }
 
         public RouteEvent(string id, double distance, RouteEventKind kind, string label,
             string aspect = "", string colorHex = "", string fact = "", string freshness = "",
-            bool appliesToTravel = true)
+            bool appliesToTravel = true, string code = "")
         {
             if (double.IsNaN(distance) || double.IsInfinity(distance) || distance < 0)
                 throw new ArgumentOutOfRangeException(nameof(distance));
@@ -34,6 +36,7 @@ namespace DvMod.HeadsUpDisplay
             Fact = fact ?? "";
             Freshness = freshness ?? "";
             AppliesToTravel = appliesToTravel;
+            Code = code ?? "";
         }
     }
 

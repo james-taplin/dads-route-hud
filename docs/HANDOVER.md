@@ -1,19 +1,19 @@
 # Development status
 
-Version 0.3.2 is a test candidate. Version 0.3.1 was built, packaged and installed for testing on
-19 October 2026; 0.3.2 has been built but not installed or packaged. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
+Version 0.3.3 is a test candidate. Versions 0.3.1 and 0.3.2 were built, packaged and installed for
+testing on 19 October 2026; 0.3.3 has been built but not installed or packaged. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
 
 The existing-instance signal-manager lookup performance correction is present. The periodic refresh correction keeps the last valid same-route signal view until its replacement is ready, rather than exposing a temporary native-only catalogue. Changes of route/vehicle/source invalidate old observations. In-game confirmation of the latest publication and GUI behavior remains pending.
 
-Automated checks of the current snapshot: zero-warning installed-reference compilation, 162
-route/window/layout checks, 14 conversion checks, and 51/51 metadata contracts. Public CI runs the
+Automated checks of the current snapshot: zero-warning installed-reference compilation, 183
+route/window/layout/naming checks, 14 conversion checks, and 51/51 metadata contracts. Public CI runs the
 two pure suites without proprietary references. Follow VALIDATION.md for actual game acceptance.
 Synthetic in-memory timings are not game performance measurements.
 
 Publication intentionally starts from the original MIT HUD history with a source-only import. Koteq's compatibility work remains credited. No game DLLs, private settings, backups or local profiling evidence are included. Neither Rinzler's binary nor its implementation is used. See LICENSING.md for pinned notices.
 
 The public repository is behind this checkout: it holds the source import up to 0.2.0, and the
-0.2.1, 0.3.0, 0.3.1 and 0.3.2 commits are local only. No tag, release or binary has been published,
+0.2.1, 0.3.0, 0.3.1, 0.3.2 and 0.3.3 commits are local only. No tag, release or binary has been published,
 and no pull request has been opened upstream. The GitHub default branch therefore does not match
 any installed build.
 
@@ -64,3 +64,26 @@ Publication reuses the single position fix already computed each frame rather th
 captured interval a second time. Behaviour and cadence are unchanged. The per-frame topology
 revalidation budget is deliberately left as it was, so a switch thrown ahead is still noticed within
 a few seconds.
+
+## Readable route list (0.3.3)
+
+The upcoming list no longer shows raw identifiers and enum names. Each row is four measured columns:
+distance, one plain word for what it is, what it says, and the game's own short code kept dimmed at
+the end so a row still matches a job overview. Yard tracks are named from the identifier parts the
+game exposes publicly, with the station's display name resolved through the game's own yard lookup
+and cached per yard: "GF-B-5-L" reads as "Goods Factory - B yard, track 5, loading". Nothing here
+hardcodes a list of stations or yards, so it follows the game rather than going stale. A track with
+no yard identity falls back to its object name, and a track with nothing identifying at all is
+reported as unnamed instead of blank. No station is invented where the game supplies none.
+
+Junctions are called switches, matching the chosen wording, and read as "Goods Factory switch -
+branch 3 of 4"; an unusable branch count is omitted rather than shown as zero. Speed signs read as
+the limit alone, since the row already says "limit". Grade signs state their sense, as "-1.4 %
+falling" or "+1.2 % climbing", with "level" at zero. Other native sign types are split into words,
+and sign accessories are named rather than prefixed with their raw type.
+
+Collection, retention and ordering are unchanged: every observation is still retained with its own
+identity, display filters still remove nothing, and the raw native type and sign text remain in each
+observation's source detail for the UMM inspector. Naming happens once per capture, and station
+lookups are cached for the session and cleared with the rest of the capture state, so no per-frame
+cost is added. In-game acceptance of the new rows is untested.

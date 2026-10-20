@@ -67,6 +67,7 @@ namespace DvMod.HeadsUpDisplay
             geometryChanged = false;
             nextRefresh = nextPublish = 0;
             topologyCursor = 0;
+            NativeTrackNames.Reset();
             Current = RouteSnapshot<RailTrack>.Empty(Main.settings.trackInfoSettings.maxEventSpan);
         }
 
@@ -255,9 +256,10 @@ namespace DvMod.HeadsUpDisplay
                     continue;
                 }
                 if (watched.Add(interval.Track)) interval.Track.TrackPointsUpdated += OnGeometryChanged;
-                var label = TrackLabel(interval.Track);
+                NativeTrackNames.Describe(interval.Track, out var label, out var trackCode);
                 var eventId = "track:" + interval.Track.GetInstanceID() + ":" + index;
-                collectingEvents.Add(new RouteEvent(eventId, interval.StartDistance, RouteEventKind.Track, label));
+                collectingEvents.Add(new RouteEvent(eventId, interval.StartDistance, RouteEventKind.Track,
+                    label, code: trackCode));
                 eventTracks[eventId] = interval.Track;
                 yield return 0;
 
@@ -290,9 +292,11 @@ namespace DvMod.HeadsUpDisplay
                     if (junction != null)
                     {
                         var count = junction.outBranches?.Count ?? 0;
-                        var junctionLabel = junction.name + " · branch " + (junction.selectedBranch + 1) + "/" + count;
+                        var junctionLabel = RouteNaming.SwitchName(
+                            NativeTrackNames.StationNameForTrack(interval.Track), junction.name,
+                            junction.selectedBranch, count);
                         collectingEvents.Add(new RouteEvent("junction:" + junction.GetInstanceID() + ":encounter:" + index,
-                            interval.EndDistance, RouteEventKind.Junction, junctionLabel));
+                            interval.EndDistance, RouteEventKind.Junction, junctionLabel, code: junction.name));
                     }
                 }
             }
@@ -358,11 +362,10 @@ namespace DvMod.HeadsUpDisplay
             foreach (var id in eventTracks.Keys.ToArray()) if (!ids.Contains(id)) eventTracks.Remove(id);
         }
 
-        private static string TrackLabel(RailTrack track)
+        private static string DescribeTrack(RailTrack track)
         {
-            if (track == null) return "an unavailable track";
-            var id = track.LogicTrack()?.ID?.ToString();
-            return string.IsNullOrWhiteSpace(id) ? track.name : id + " · " + track.name;
+            NativeTrackNames.Describe(track, out var name, out var code);
+            return code.Length == 0 ? name : name + " (" + code + ")";
         }
 
         /// <summary>
@@ -376,7 +379,7 @@ namespace DvMod.HeadsUpDisplay
             if (source.Termination == RouteWalkTermination.HorizonReached) return null;
             var track = source.TerminalTrack;
             var text = "Route stopped at " + Metres(source.ReachedDistance) + " of "
-                + Metres(source.RequestedDistance) + " selected, on " + TrackLabel(track)
+                + Metres(source.RequestedDistance) + " selected, on " + DescribeTrack(track)
                 + ": " + Reason(source.Termination);
             var junction = track == null ? null : source.TerminalForward ? track.outJunction : track.inJunction;
             if (junction != null)
@@ -425,7 +428,7 @@ namespace DvMod.HeadsUpDisplay
                     freshness = OptionalSignalTelemetry.IsAvailable ? "Local occupancy/reservation observation; " + OptionalSignalTelemetry.Status : "";
                 }
                 events.Add(new RouteEvent(item.Id, item.Distance, item.Kind, item.Label, item.Aspect,
-                    item.ColorHex, fact, freshness, item.AppliesToTravel));
+                    item.ColorHex, fact, freshness, item.AppliesToTravel, item.Code));
             }
             foreach (var signal in OptionalSignalTelemetry.UpcomingSignals)
             {

@@ -37,8 +37,66 @@ internal static class RouteCoreProgram
         AtomicDisplayReplacement();
         ConfigurableMetricColumns();
         FittedRouteGraph();
+        ReadableNames();
         SyntheticTiming();
         Console.WriteLine(checks + " route-core checks passed.");
+    }
+
+    /// <summary>Readable names come from the game's own identifier parts, never a hardcoded yard list.</summary>
+    private static void ReadableNames()
+    {
+        Check(RouteNaming.TrackNameFromParts("GF", "B", "5L", "Goods Factory", "[Y]_[GF]_[B-5-L]")
+            == "Goods Factory · B yard, track 5, loading", "Yard track reads as plain English");
+        Check(RouteNaming.TrackNameFromParts("GF", "B", "12SP", "Goods Factory", "x")
+            == "Goods Factory · B yard, track 12, passenger storage", "Two-letter types and multi-digit numbers survive");
+        Check(RouteNaming.TrackNameFromParts("", "", "M", "", "[Y]_[]_[--M]") == "Main line",
+            "A main line with no yard identity is named, not left blank");
+        Check(RouteNaming.TrackNameFromParts("CSW", "", "", "Coal Mine South", "x") == "Coal Mine South",
+            "A station with no further parts is just the station");
+        Check(RouteNaming.TrackNameFromParts("IMW", "A", "3S", "", "x") == "IMW · A yard, track 3, storage",
+            "Without a resolved station the yard code still leads");
+        Check(RouteNaming.TrackNameFromParts(null, null, null, null, "track_123") == "track_123",
+            "An unidentified track falls back to its object name");
+        Check(RouteNaming.TrackNameFromParts(null, null, null, null, null) == "Unnamed track",
+            "Nothing identifying at all is reported, not blank");
+        Check(RouteNaming.TrackNameFromParts("GF", "B", "9Z", "Goods Factory", "x")
+            == "Goods Factory · B yard, track 9, Z", "An unknown type letter is shown as given, not guessed");
+
+        RouteNaming.SplitTrackPart("5L", out var order, out var type);
+        Check(order == "5" && type == "L", "Track part splits into number and type");
+        RouteNaming.SplitTrackPart("M", out order, out type);
+        Check(order == "" && type == "M", "A type with no number splits cleanly");
+        RouteNaming.SplitTrackPart(null, out order, out type);
+        Check(order == "" && type == "", "A missing track part is empty, not an error");
+
+        Check(RouteNaming.SwitchName("Goods Factory", "junction-12", 2, 4) == "Goods Factory switch · branch 3 of 4",
+            "Switch names its station and selected branch from one");
+        Check(RouteNaming.SwitchName("", "junction-12", 0, 2) == "junction-12 · branch 1 of 2",
+            "Without a station the native junction name is kept");
+        Check(RouteNaming.SwitchName("Harbor", "j", 0, 0) == "Harbor switch",
+            "An unusable branch count is omitted rather than shown as zero");
+        Check(RouteNaming.SwitchName("Harbor", "j", 5, 3) == "Harbor switch",
+            "A selected branch outside the count is not reported");
+
+        Check(RouteNaming.GradeText(-1.44) == "-1.4 % falling" && RouteNaming.GradeText(1.25) == "+1.3 % climbing"
+            && RouteNaming.GradeText(0) == "level" && RouteNaming.GradeText(double.NaN) == "grade unavailable",
+            "Grades state their sense");
+
+        Check(RouteNaming.Words("SpeedLimitDual") == "Speed limit dual", "Native type names read as words");
+        Check(RouteNaming.Words("SignLP") == "Sign LP", "Runs of capitals are kept intact");
+        Check(RouteNaming.Words(null) == "" && RouteNaming.Words("  ") == "", "Missing type names stay empty");
+
+        Check(RouteNaming.KindWord(RouteEventKind.Junction) == "switch"
+            && RouteNaming.KindWord(RouteEventKind.Speed) == "limit"
+            && RouteNaming.KindWord(RouteEventKind.OtherSign) == "sign"
+            && RouteNaming.KindWord(RouteEventKind.Track) == "track", "Each kind has one plain word");
+
+        var coded = new RouteEvent("id", 10, RouteEventKind.Track, "Goods Factory · B yard, track 5, loading",
+            code: "GF-B-5-L");
+        var shifted = RouteSnapshotView.Shift(new RouteSnapshot<string>(1, 100, 100,
+            RouteWalkTermination.HorizonReached, Array.Empty<RouteInterval<string>>(), new[] { coded },
+            Array.Empty<RouteProfilePoint>(), false, "", ""), 5);
+        Check(shifted.Events.Single().Code == "GF-B-5-L", "The game's code survives a shifted view");
     }
 
     private static void FittedRouteGraph()

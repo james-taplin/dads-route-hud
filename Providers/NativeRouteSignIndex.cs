@@ -316,18 +316,19 @@ namespace DvMod.HeadsUpDisplay
             var evidence = source.Captured ? "Captured native placement" : "Native recipe matched to observed sign";
             if (parts.Length == 0)
                 result.Add(new NativeRouteSign(identity + ":pole", span, source.Forward, RouteEventKind.OtherSign,
-                    "Sign pole (no retained parameters)", evidence));
+                    "Sign pole · no parameters retained", evidence));
             for (var index = 0; index < parts.Length; index++)
             {
                 var part = parts[index];
                 var type = part.type.ToString();
                 var kind = type.StartsWith("SpeedLimit", StringComparison.Ordinal) ? RouteEventKind.Speed
                     : type.StartsWith("Grade", StringComparison.Ordinal) ? RouteEventKind.Grade : RouteEventKind.OtherSign;
-                var label = type + (string.IsNullOrWhiteSpace(part.signText) ? "" : " " + part.signText);
+                var label = RouteNaming.Words(type)
+                    + (string.IsNullOrWhiteSpace(part.signText) ? "" : " · " + part.signText);
                 if (kind == RouteEventKind.Speed && TryNumber(part.signText, out var limit))
-                    label = "Speed limit " + (limit * 10).ToString("0.###", CultureInfo.InvariantCulture) + " km/h";
+                    label = (limit * 10).ToString("0.###", CultureInfo.InvariantCulture) + " km/h";
                 else if (kind == RouteEventKind.Grade && TryNumber(part.signText, out var grade))
-                    label = "Grade " + grade.ToString("+0.###;-0.###;0", CultureInfo.InvariantCulture) + "%";
+                    label = RouteNaming.GradeText(grade);
                 var fact = evidence + "; native type " + type + "; raw text: " + (part.signText ?? "<null>")
                     + "; prefab: " + (part.sign != null ? part.sign.name : "<unavailable>");
                 result.Add(new NativeRouteSign(identity + ":part:" + index, span, source.Forward, kind, label, fact));
@@ -336,7 +337,7 @@ namespace DvMod.HeadsUpDisplay
                 {
                     var item = part.accessories[accessory];
                     result.Add(new NativeRouteSign(identity + ":part:" + index + ":accessory:" + accessory, span, source.Forward,
-                        RouteEventKind.OtherSign, "Sign accessory: " + (item != null ? item.name : "<unavailable>"), fact));
+                        RouteEventKind.OtherSign, "Accessory · " + (item != null ? RouteNaming.Words(item.name) : "unavailable"), fact));
                 }
             }
         }

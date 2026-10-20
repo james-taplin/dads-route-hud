@@ -301,12 +301,45 @@ namespace DvMod.HeadsUpDisplay
             GUI.enabled = enabled;
             GUILayout.Label($"Page {(eventPage.PageCount == 0 ? 0 : eventPage.PageIndex + 1)} / {eventPage.PageCount}", Styles.noWrap);
             GUILayout.EndHorizontal();
-            foreach (var item in eventPage.Items)
+            // Measured columns, so distances line up and the kind is readable at a glance.
+            var rows = eventPage.Items.Select(RouteMonitor.EventRow).ToArray();
+            var distanceWidth = 0f;
+            var kindWidth = 0f;
+            var codeWidth = 0f;
+            foreach (var row in rows)
             {
+                distanceWidth = Mathf.Max(distanceWidth, Styles.TextWidth(row.Distance, Styles.rightAlign));
+                kindWidth = Mathf.Max(kindWidth, Styles.TextWidth(row.Kind, Styles.noWrap));
+                codeWidth = Mathf.Max(codeWidth, Styles.TextWidth(row.Code, Styles.noWrap));
+            }
+            // The description keeps whatever is left, and never less than a readable minimum.
+            var fixedWidth = distanceWidth + kindWidth + codeWidth + 3 * ColumnSpacing;
+            if (innerWidth - fixedWidth < 120) codeWidth = 0;
+            fixedWidth = distanceWidth + kindWidth + codeWidth + (codeWidth > 0 ? 3 : 2) * ColumnSpacing;
+            var descriptionWidth = Mathf.Max(60, innerWidth - fixedWidth);
+            for (var index = 0; index < rows.Length; index++)
+            {
+                var row = rows[index];
                 var saved = GUI.contentColor;
-                if (item.Kind == RouteEventKind.Signal) GUI.contentColor = RouteMonitor.EventColor(item);
-                GUILayout.Label(RouteMonitor.FormatEvent(item), Styles.noWrap, GUILayout.Width(innerWidth));
+                GUILayout.BeginHorizontal(GUILayout.Width(innerWidth));
+                GUILayout.Label(row.Distance, Styles.rightAlign, GUILayout.Width(distanceWidth));
+                GUILayout.Space(ColumnSpacing);
+                GUI.contentColor = new Color(saved.r, saved.g, saved.b, saved.a * 0.65f);
+                GUILayout.Label(row.Kind, Styles.noWrap, GUILayout.Width(kindWidth));
                 GUI.contentColor = saved;
+                GUILayout.Space(ColumnSpacing);
+                if (eventPage.Items[index].Kind == RouteEventKind.Signal)
+                    GUI.contentColor = RouteMonitor.EventColor(eventPage.Items[index]);
+                GUILayout.Label(row.Description, Styles.noWrap, GUILayout.Width(descriptionWidth));
+                GUI.contentColor = saved;
+                if (codeWidth > 0)
+                {
+                    GUILayout.Space(ColumnSpacing);
+                    GUI.contentColor = new Color(saved.r, saved.g, saved.b, saved.a * 0.5f);
+                    GUILayout.Label(row.Code, Styles.noWrap, GUILayout.Width(codeWidth));
+                    GUI.contentColor = saved;
+                }
+                GUILayout.EndHorizontal();
             }
             GUILayout.Label("Display filters and pages do not remove retained events. Full source details are in the UMM inspector.", Styles.noWrap, GUILayout.Width(innerWidth));
         }

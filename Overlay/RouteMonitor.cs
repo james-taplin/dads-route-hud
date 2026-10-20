@@ -122,7 +122,7 @@ namespace DvMod.HeadsUpDisplay
                 DrawProfile(new Rect(area.x, y, width, profileHeight), 0, fullRange); y += profileHeight;
                 DrawClusters(new Rect(area.x, y, width, line), overviewClusters, 0, fullRange); y += line;
                 DrawAxis(new Rect(area.x, y, width, line), 0, fullRange, 5); y += line;
-                Text(new Rect(area.x, y, width, line), "S signal   V speed   J junction   G grade   T track", Styles.noWrap); y += line;
+                Text(new Rect(area.x, y, width, line), "S signal   V limit   J switch   G grade   T track", Styles.noWrap); y += line;
                 Text(new Rect(area.x, y, width, line), "Numbers = grouped events · all items in UMM", Styles.noWrap); y += line;
             }
             if (showNear)
@@ -171,8 +171,25 @@ namespace DvMod.HeadsUpDisplay
                 default: return s.showOtherSigns;
             }
         }
-        public static string FormatEvent(RouteEvent item) =>
-            $"{Metres(item.Distance)}  {item.Kind}  {Plain(item.Label)}  {Plain(item.Aspect)}  {Plain(item.Fact)}" + (item.AppliesToTravel ? "" : "  [opposite]");
+        /// <summary>The row's four columns: distance, what it is, what it says, and the game's code.</summary>
+        public static (string Distance, string Kind, string Description, string Code) EventRow(RouteEvent item)
+        {
+            var description = Plain(item.Label);
+            foreach (var extra in new[] { item.Aspect, item.Fact })
+            {
+                var text = Plain(extra).Trim();
+                if (text.Length > 0) description += "  ·  " + text;
+            }
+            if (!item.AppliesToTravel) description += "  (opposite direction)";
+            return (Metres(item.Distance), RouteNaming.KindWord(item.Kind), description, Plain(item.Code).Trim());
+        }
+
+        public static string FormatEvent(RouteEvent item)
+        {
+            var row = EventRow(item);
+            return row.Distance + "  " + row.Kind + "  " + row.Description
+                + (row.Code.Length == 0 ? "" : "  " + row.Code);
+        }
 
         private static void DrawClusters(Rect rect, IReadOnlyList<Cluster> clusters, double start, double end)
         {
