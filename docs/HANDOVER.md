@@ -1,7 +1,7 @@
 # Development status
 
-Version 0.3.7 is a test candidate, built, packaged and installed for testing on 20 October 2026,
-as were 0.3.1 to 0.3.6 before it. In-game acceptance of the readable list, the switch markers, the
+Version 0.3.8 is a test candidate, built, packaged and installed for testing on 20 October 2026,
+as were 0.3.1 to 0.3.7 before it. In-game acceptance of the readable list, the switch markers, the
 capture hold and the reverser-led direction is still pending. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
 
 The existing-instance signal-manager lookup performance correction is present. The periodic refresh correction keeps the last valid same-route signal view until its replacement is ready, rather than exposing a temporary native-only catalogue. Changes of route/vehicle/source invalidate old observations. In-game confirmation of the latest publication and GUI behavior remains pending.
@@ -14,7 +14,7 @@ Synthetic in-memory timings are not game performance measurements.
 Publication intentionally starts from the original MIT HUD history with a source-only import. Koteq's compatibility work remains credited. No game DLLs, private settings, backups or local profiling evidence are included. Neither Rinzler's binary nor its implementation is used. See LICENSING.md for pinned notices.
 
 The public repository is behind this checkout: it holds the source import up to 0.2.0, and the
-0.2.1, 0.3.0 and the 0.3.1 to 0.3.7 commits are local only. No tag, release or binary has been published,
+0.2.1, 0.3.0 and the 0.3.1 to 0.3.8 commits are local only. No tag, release or binary has been published,
 and no pull request has been opened upstream. The GitHub default branch therefore does not match
 any installed build.
 
@@ -174,3 +174,28 @@ is anchored to stops changing as the player moves between cars.
 
 This is structural rather than arithmetic, so the pure suites do not cover it; it needs the game and
 a reversed-coupling consist to accept.
+
+## Optional signals stop dropping out every refresh (0.3.8)
+
+Steady running still showed the list changing every couple of seconds after 0.3.5 and 0.3.7. The
+remaining cause was a capture completing, not a capture being discarded, and it was deterministic
+rather than intermittent.
+
+A capture completes on the scheduled refresh roughly every two seconds. Completing one called
+OptionalSignalTelemetry.Reset, which clears that component's bindings: its manager type, so it
+reports itself unavailable, and its source assemblies, so their identities become null. The
+publication hold that exists precisely to keep the previous view on screen while optional signals
+are re-read compares exactly those two things, and both had just been destroyed, so the hold could
+never apply at the only moment it was for. The capture was therefore published with no optional
+signals at all, and the rows returned about half a second later when the read pass finished. With
+DVSignals, AI Traffic and DoubleTrack all active, that is every signal row in the list appearing and
+disappearing on a two-second cycle.
+
+Completing a capture no longer resets the optional telemetry. It already re-reads on its own when
+the capture's revision changes, so the only effect of the reset was to destroy the state the hold
+depends on. A genuine route change still resets it, which is correct, because the previous optional
+sample describes a route that no longer applies.
+
+With logging enabled, any change in how many events reach the screen is now logged with the counts,
+whether the previous capture was held, and the optional signal status, so a list that still gains or
+loses rows can be attributed from Player.log rather than inferred.

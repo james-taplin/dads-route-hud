@@ -127,3 +127,11 @@ effect on the route, in both orientations. Couple a wagon facing the other way, 
 confirm the route still runs from the locomotive's end rather than reversing. Walk from the cab
 through the train and back and confirm the list does not empty or rebuild on the way. Leave the cab
 entirely and confirm the route continues from the locomotive last driven.
+
+## Optional signals held across a refresh - pending
+
+With DVSignals active, run steadily on a signalled stretch and watch the displayed event count for a
+minute: it must not drop and recover on a cycle. Confirm signal rows stay put across the refresh that
+happens about every two seconds. Throw a signal and confirm its aspect still updates. Disable
+DVSignals and confirm the list is stable without it and reports signals unavailable. Enable logging,
+drive for a minute, and confirm Player.log shows no repeated event-count swings.

@@ -31,6 +31,7 @@ namespace DvMod.HeadsUpDisplay
         private static bool directionDecided;
         private static string rebuildReason = "";
         private static int rebuildCount;
+        private static int publishedCount = -1;
         private static RouteInterval<RailTrack>? startBoundary;
         private static IReadOnlyList<RouteInterval<RailTrack>> collectionIntervals = Array.Empty<RouteInterval<RailTrack>>();
         private static bool geometryChanged;
@@ -69,6 +70,7 @@ namespace DvMod.HeadsUpDisplay
             directionDecided = false;
             rebuildReason = "";
             rebuildCount = 0;
+            publishedCount = -1;
             initialElevation = null;
             captureOffset = 0;
             geometryChanged = false;
@@ -201,6 +203,7 @@ namespace DvMod.HeadsUpDisplay
                                 displayedTrafficSource = OptionalSignalTelemetry.ActiveTrafficSource;
                             }
                             Current = RouteSnapshotView.Shift(selected, displayOffset);
+                            LogPublication(hold);
                         }
                         else if (retained.Intervals.Count == 0) Current = MergeOptional(retained);
                         nextPublish = Time.realtimeSinceStartup + 0.25f;
@@ -437,7 +440,10 @@ namespace DvMod.HeadsUpDisplay
             topologyCursor = 0;
             nextRefresh = Time.realtimeSinceStartup + 2;
             nextPublish = 0;
-            OptionalSignalTelemetry.Reset();
+            // Deliberately not resetting optional telemetry here. It re-reads on its own when the
+            // capture's revision changes, and tearing down its binding would make the source
+            // identities and availability that the publication hold compares against disappear at
+            // the one moment the hold exists for, publishing a capture with no optional signals.
             var needed = new HashSet<RailTrack>(retained.Intervals.Select(i => i.Track));
             foreach (var track in watched.ToArray())
                 if (track == null || !needed.Contains(track))
@@ -502,6 +508,23 @@ namespace DvMod.HeadsUpDisplay
 
         private static string Metres(double value) =>
             value.ToString("N0", CultureInfo.InvariantCulture) + " m";
+
+        /// <summary>
+        /// Reports a change in how many events reach the screen, so a list that visibly gains or
+        /// loses rows can be attributed. Only with logging enabled, and only when it changes.
+        /// </summary>
+        private static void LogPublication(bool held)
+        {
+            if (!Main.settings.enableLogging) return;
+            var count = Current.Events.Count;
+            if (count == publishedCount) return;
+            var previous = publishedCount;
+            publishedCount = count;
+            if (previous < 0) return;
+            Main.mod?.Logger.Log("Route list " + previous.ToString(CultureInfo.InvariantCulture) + " -> "
+                + count.ToString(CultureInfo.InvariantCulture) + " events"
+                + (held ? "; previous capture held" : "") + "; optional signals: " + OptionalSignalTelemetry.Status);
+        }
 
         /// <summary>Marks a completed capture that is being shown while its replacement is collected.</summary>
         private static RouteSnapshot<RailTrack> Rebuilding(RouteSnapshot<RailTrack> source)
