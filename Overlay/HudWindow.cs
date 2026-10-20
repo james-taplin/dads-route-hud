@@ -33,8 +33,13 @@ namespace DvMod.HeadsUpDisplay
             if (OwnsInput) GUIUtility.hotControl = 0;
             control = 0;
         }
+        /// <summary>
+        /// Draws the window. Header actions are optional: a detached window carries none, so every
+        /// attach and detach control stays together on the main window.
+        /// </summary>
         public void Draw(ref Rect savedRect, string title, float background, float content,
-            bool locked, bool allowStart, Action drawContent, string actionLabel, Action headerAction, string secondActionLabel = "", Action? secondAction = null)
+            bool locked, bool allowStart, Action drawContent, string actionLabel = "",
+            Action? headerAction = null, string secondActionLabel = "", Action? secondAction = null)
         {
             savedRect = Clamp(savedRect);
             if (Event.current.type == EventType.Layout) frameRect = savedRect;
@@ -48,15 +53,22 @@ namespace DvMod.HeadsUpDisplay
             var secondRow = !string.IsNullOrEmpty(secondActionLabel);
             var titleHeight = headerHeight;
             if (secondRow) headerHeight += titleHeight;
-            var actionWidth = string.IsNullOrEmpty(actionLabel) ? 0 : Mathf.Min(frameRect.width - 40,
-                Mathf.Max(90, Styles.TextWidth(actionLabel, Styles.noWrapBold) + 20));
-            var actionRect = new Rect(frameRect.xMax - actionWidth - 8, frameRect.y + 3, actionWidth, headerHeight - 6);
+            // Widths follow the font, so a small font gives a small button rather than the
+            // skin's default, and the title keeps whatever room is left.
+            var fontSize = Styles.noWrapBold.fontSize;
+            var actionWidth = string.IsNullOrEmpty(actionLabel) ? 0 : Mathf.Min(frameRect.width - fontSize * 3,
+                Mathf.Max(fontSize * 3, Styles.ButtonWidth(actionLabel)));
+            var actionRect = new Rect(frameRect.xMax - actionWidth - 6, frameRect.y + 3, actionWidth, headerHeight - 6);
             var secondRect = new Rect();
             if (secondRow)
             {
-                actionWidth = (frameRect.width - 22) / 2;
-                actionRect = new Rect(frameRect.x + 8, frameRect.y + titleHeight, actionWidth, titleHeight - 4);
-                secondRect = new Rect(actionRect.xMax + 6, actionRect.y, actionWidth, actionRect.height);
+                // Two actions sit on their own row, each no wider than it needs, centred together.
+                var gap = Mathf.Max(4, fontSize / 2);
+                var widest = Mathf.Max(Styles.ButtonWidth(actionLabel), Styles.ButtonWidth(secondActionLabel));
+                actionWidth = Mathf.Min(widest, Mathf.Max(fontSize * 3, (frameRect.width - gap - 16) / 2));
+                var left = frameRect.x + Mathf.Max(8, (frameRect.width - (actionWidth * 2 + gap)) / 2);
+                actionRect = new Rect(left, frameRect.y + titleHeight + 1, actionWidth, titleHeight - 6);
+                secondRect = new Rect(actionRect.xMax + gap, actionRect.y, actionWidth, actionRect.height);
             }
             var mouseFree = Cursor.visible && Cursor.lockState != CursorLockMode.Locked;
             if (locked || !mouseFree) Release();
@@ -105,8 +117,9 @@ namespace DvMod.HeadsUpDisplay
                 // Ignore driving input before drawing any interactive controls, then restore it for the game.
                 if (suppressInput) ev.type = EventType.Ignore;
                 GUI.enabled = savedEnabled && mouseFree && (allowStart || OwnsInput);
-                if (!string.IsNullOrEmpty(actionLabel) && GUI.Button(actionRect, actionLabel)) headerAction();
-                if (secondRow && GUI.Button(secondRect, secondActionLabel)) secondAction?.Invoke();
+                if (!string.IsNullOrEmpty(actionLabel) && GUI.Button(actionRect, actionLabel, Styles.button))
+                    headerAction?.Invoke();
+                if (secondRow && GUI.Button(secondRect, secondActionLabel, Styles.button)) secondAction?.Invoke();
                 GUI.enabled = savedEnabled;
                 var bodyHeight = Mathf.Max(1, frameRect.height - headerHeight - 16);
                 GUILayout.BeginArea(new Rect(frameRect.x + 8, frameRect.y + headerHeight, Mathf.Max(1, frameRect.width - 16), bodyHeight));

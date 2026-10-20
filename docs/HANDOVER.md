@@ -1,7 +1,7 @@
 # Development status
 
-Version 0.3.8 is a test candidate, built, packaged and installed for testing on 20 October 2026,
-as were 0.3.1 to 0.3.7 before it. In-game acceptance of the readable list, the switch markers, the
+Version 0.3.9 is a test candidate, built, packaged and installed for testing on 20 October 2026,
+as were 0.3.1 to 0.3.8 before it. In-game acceptance of the readable list, the switch markers, the
 capture hold and the reverser-led direction is still pending. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
 
 The existing-instance signal-manager lookup performance correction is present. The periodic refresh correction keeps the last valid same-route signal view until its replacement is ready, rather than exposing a temporary native-only catalogue. Changes of route/vehicle/source invalidate old observations. In-game confirmation of the latest publication and GUI behavior remains pending.
@@ -14,7 +14,7 @@ Synthetic in-memory timings are not game performance measurements.
 Publication intentionally starts from the original MIT HUD history with a source-only import. Koteq's compatibility work remains credited. No game DLLs, private settings, backups or local profiling evidence are included. Neither Rinzler's binary nor its implementation is used. See LICENSING.md for pinned notices.
 
 The public repository is behind this checkout: it holds the source import up to 0.2.0, and the
-0.2.1, 0.3.0 and the 0.3.1 to 0.3.8 commits are local only. No tag, release or binary has been published,
+0.2.1, 0.3.0 and the 0.3.1 to 0.3.9 commits are local only. No tag, release or binary has been published,
 and no pull request has been opened upstream. The GitHub default branch therefore does not match
 any installed build.
 
@@ -199,3 +199,20 @@ sample describes a route that no longer applies.
 With logging enabled, any change in how many events reach the screen is now logged with the counts,
 whether the previous capture was held, and the optional signal status, so a list that still gains or
 loses rows can be attributed from Player.log rather than inferred.
+
+## Controls live on the main window (0.3.9)
+
+The detached route and metrics windows no longer carry an Attach action in their headers. Every
+attach and detach control is on the main window, which keeps the detached windows to their content
+and their own title. Header actions are now optional in the window code rather than always present.
+With the main window hidden and a section detached, re-attaching is done from the UMM settings, as
+the main window is deliberately the only in-world control surface.
+
+Overlay buttons take the HUD's own font size and proportional padding instead of the default skin's
+fixed size, so they shrink with a small font. A single header action is only as wide as its label
+needs, rather than holding a 90-pixel minimum. Two actions share their own row, each sized to the
+wider of the two labels and centred together, instead of each taking half the window's width. The
+page buttons under the route list are styled the same way. The UMM settings panel keeps the default
+skin, which is the host's to size.
+
+The dead attach actions left behind by this change are removed rather than left unreferenced.

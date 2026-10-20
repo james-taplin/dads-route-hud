@@ -17,6 +17,8 @@ namespace DvMod.HeadsUpDisplay
         public static readonly GUIStyle rightAlign;
         public static readonly GUIStyle richText;
         public static readonly GUIStyle panel;
+        /// <summary>Overlay buttons, sized from the HUD's own font rather than the default skin.</summary>
+        public static readonly GUIStyle button;
         private static readonly GUIContent measurement = new GUIContent();
         private static int appliedFontSize;
 
@@ -31,6 +33,7 @@ namespace DvMod.HeadsUpDisplay
             rightAlign = new GUIStyle(noWrap) { alignment = TextAnchor.MiddleRight };
             richText = new GUIStyle(noWrap) { richText = true };
             panel = new GUIStyle { padding = new RectOffset(10, 10, 8, 8), margin = new RectOffset() };
+            button = new GUIStyle(GUI.skin.button) { wordWrap = false, alignment = TextAnchor.MiddleCenter };
         }
 
         public static void SetFontSize(int fontSize)
@@ -45,7 +48,18 @@ namespace DvMod.HeadsUpDisplay
                 style.padding = new RectOffset();
                 style.normal.textColor = Color.white;
             }
+            // Buttons keep the skin's own colours, but take the HUD's size and proportional
+            // padding so they shrink with a small font instead of staying at the skin's default.
+            var sides = Mathf.Max(4, Mathf.RoundToInt(fontSize * 0.6f));
+            var ends = Mathf.Max(2, Mathf.RoundToInt(fontSize * 0.25f));
+            button.fontSize = fontSize;
+            button.fixedHeight = 0;
+            button.padding = new RectOffset(sides, sides, ends, ends);
+            button.margin = new RectOffset(0, 0, 0, 0);
         }
+
+        /// <summary>A button's natural width at the current font size, including its padding.</summary>
+        public static float ButtonWidth(string text) => TextWidth(text, button) + 2;
 
         public static float TextWidth(string text, GUIStyle style)
         {
@@ -73,7 +87,7 @@ namespace DvMod.HeadsUpDisplay
         private float background, content, graphBackground, graphContent;
         private bool locked;
         private string routeActionLabel = "", metricsActionLabel = "";
-        private Action drawMain = null!, drawGraph = null!, toggleRoute = null!, attachRoute = null!, drawMetricContent = null!, toggleMetrics = null!, attachMetrics = null!;
+        private Action drawMain = null!, drawGraph = null!, toggleRoute = null!, drawMetricContent = null!, toggleMetrics = null!;
         private readonly List<(string label, string value, float labelWidth, float valueWidth)> metrics =
             new List<(string, string, float, float)>();
         private readonly List<List<int>> metricRows = new List<List<int>>();
@@ -87,10 +101,8 @@ namespace DvMod.HeadsUpDisplay
             drawMain = DrawMainContent;
             drawGraph = RouteMonitor.DrawPassive;
             toggleRoute = ToggleRouteWindow;
-            attachRoute = AttachRouteWindow;
             drawMetricContent = DrawMetrics;
             toggleMetrics = () => SetMetricsWindow(!Main.settings.layoutSettings.popOutMetrics);
-            attachMetrics = () => SetMetricsWindow(false);
         }
         public void OnGUI()
         {
@@ -111,7 +123,7 @@ namespace DvMod.HeadsUpDisplay
             if (showGraph)
             {
                 graphWindow.Draw(ref graphRect, "Track ahead", graphBackground, graphContent, locked,
-                    !showMetrics || !metricsRect.Contains(Event.current.mousePosition) || graphWindow.OwnsInput, drawGraph, "Attach", attachRoute);
+                    !showMetrics || !metricsRect.Contains(Event.current.mousePosition) || graphWindow.OwnsInput, drawGraph);
                 Main.settings.graphPosition = graphRect.position;
                 Main.settings.graphSize = graphRect.size;
             }
@@ -119,7 +131,7 @@ namespace DvMod.HeadsUpDisplay
             if (showMetrics)
             {
                 metricsWindow.Draw(ref metricsRect, compact ? "Metrics · columns" : "Metrics · tape", metricsBackground,
-                    metricsContent, locked, true, drawMetricContent, "Attach", attachMetrics);
+                    metricsContent, locked, true, drawMetricContent);
                 Main.settings.metricsPosition = metricsRect.position;
                 Main.settings.metricsSize = metricsRect.size;
             }
@@ -133,7 +145,6 @@ namespace DvMod.HeadsUpDisplay
             Main.RequestSettingsSave();
         }
         private static void ToggleRouteWindow() => SetRouteWindow(!Main.settings.layoutSettings.popOutGraph);
-        private static void AttachRouteWindow() => SetRouteWindow(false);
         private static void SetRouteWindow(bool detached)
         {
             var layout = Main.settings.layoutSettings;
@@ -295,9 +306,9 @@ namespace DvMod.HeadsUpDisplay
             GUILayout.BeginHorizontal();
             var enabled = GUI.enabled;
             GUI.enabled = enabled && eventPage.PageIndex > 0;
-            if (GUILayout.Button("Previous", GUILayout.ExpandWidth(false))) requestedPage--;
+            if (GUILayout.Button("Previous", Styles.button, GUILayout.ExpandWidth(false))) requestedPage--;
             GUI.enabled = enabled && eventPage.PageIndex + 1 < eventPage.PageCount;
-            if (GUILayout.Button("Next", GUILayout.ExpandWidth(false))) requestedPage++;
+            if (GUILayout.Button("Next", Styles.button, GUILayout.ExpandWidth(false))) requestedPage++;
             GUI.enabled = enabled;
             GUILayout.Label($"Page {(eventPage.PageCount == 0 ? 0 : eventPage.PageIndex + 1)} / {eventPage.PageCount}", Styles.noWrap);
             GUILayout.EndHorizontal();

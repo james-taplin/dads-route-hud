@@ -135,3 +135,12 @@ minute: it must not drop and recover on a cycle. Confirm signal rows stay put ac
 happens about every two seconds. Throw a signal and confirm its aspect still updates. Disable
 DVSignals and confirm the list is stable without it and reports signals unavailable. Enable logging,
 drive for a minute, and confirm Player.log shows no repeated event-count swings.
+
+## Control layout and button scale - pending
+
+Detach the route and metrics windows and confirm neither header offers an Attach action, that both
+still drag and resize by header and grip, and that the main window's own actions attach them. Set
+the font to 10, 15 and 28 and confirm the header buttons scale with it, that their labels are not
+clipped, and that the two-action row stays centred without crowding the title. Narrow the main window
+and confirm the buttons stay legible and inside the frame. Confirm the page buttons under the route
+list match.
