@@ -40,6 +40,7 @@ internal static class RouteCoreProgram
         ReadableNames();
         SwitchSides();
         StickyDirection();
+        GroupedMetricColumns();
         SyntheticTiming();
         Console.WriteLine(checks + " route-core checks passed.");
     }
@@ -177,6 +178,78 @@ internal static class RouteCoreProgram
         Check(RouteDirection.Decide(double.NaN, null, true, true)
             && !RouteDirection.Decide(double.NaN, double.NaN, true, false),
             "Unusable inputs keep the decision");
+    }
+
+    /// <summary>Auto columns must read as columns of like things, without losing or moving a metric.</summary>
+    private static void GroupedMetricColumns()
+    {
+        Check(MetricGroups.Of("Throttle") == MetricGroup.Controls
+            && MetricGroups.Of("Reverser") == MetricGroup.Controls
+            && MetricGroups.Of("Cutoff") == MetricGroup.Controls, "Driving levers are controls");
+        Check(MetricGroups.Of("Train brake") == MetricGroup.Brakes
+            && MetricGroups.Of("Brake pipe") == MetricGroup.Brakes
+            && MetricGroups.Of("Main reservoir") == MetricGroup.Brakes
+            && MetricGroups.Of("Cylinder application") == MetricGroup.Brakes
+            && MetricGroups.Of("Handbrake") == MetricGroup.Brakes,
+            "Brake controls and brake pressures share one group");
+        Check(MetricGroups.Of("Power") == MetricGroup.Power
+            && MetricGroups.Of("Tractive effort") == MetricGroup.Power
+            && MetricGroups.Of("Engine load torque") == MetricGroup.Power,
+            "Output and torque read together");
+        Check(MetricGroups.Of("Boiler pressure") == MetricGroup.Engine
+            && MetricGroups.Of("Firebox temperature") == MetricGroup.Engine
+            && MetricGroups.Of("Engine RPM") == MetricGroup.Engine, "Engine and boiler read together");
+        Check(MetricGroups.Of("Coal reserve") == MetricGroup.Supplies
+            && MetricGroups.Of("Water tank level") == MetricGroup.Supplies, "Consumables are supplies");
+        Check(MetricGroups.Of("Speed") == MetricGroup.Train && MetricGroups.Of("Grade") == MetricGroup.Train,
+            "What the train is doing leads");
+        Check(MetricGroups.Of("Sim: rearrangedRearSteamEngine.MAX_FLOW [MASS_RATE]") == MetricGroup.NativePort,
+            "Native ports keep to themselves");
+        // An unknown metric still lands somewhere sensible rather than being dropped.
+        Check(MetricGroups.Of("Auxiliary brake reservoir") == MetricGroup.Brakes
+            && MetricGroups.Of("Boiler blowdown rate") == MetricGroup.Engine
+            && MetricGroups.Of("") == MetricGroup.Train && MetricGroups.Of(null) == MetricGroup.Train,
+            "Unrecognised metrics still group by what they are about");
+
+        var labels = new[] { "Speed", "Throttle", "Reverser", "Train brake", "Brake pipe", "Power",
+            "Tractive effort", "Boiler pressure", "Coal reserve" };
+        var groups = labels.Select(MetricGroups.Of).ToArray();
+        var auto = new int[labels.Length];
+
+        var six = MetricColumns.Arrange(auto, groups, 6);
+        Check(six.Sum(c => c.Count) == labels.Length && six.SelectMany(c => c).Distinct().Count() == labels.Length,
+            "Every metric is placed exactly once");
+        Check(six[0].Select(i => labels[i]).SequenceEqual(new[] { "Speed" })
+            && six[1].Select(i => labels[i]).SequenceEqual(new[] { "Throttle", "Reverser" })
+            && six[2].Select(i => labels[i]).SequenceEqual(new[] { "Train brake", "Brake pipe" })
+            && six[3].Select(i => labels[i]).SequenceEqual(new[] { "Power", "Tractive effort" })
+            && six[4].Select(i => labels[i]).SequenceEqual(new[] { "Boiler pressure" })
+            && six[5].Select(i => labels[i]).SequenceEqual(new[] { "Coal reserve" }),
+            "Six columns give one group each, in reading order");
+
+        // Fewer columns than groups: neighbours share, in order, and nothing is lost.
+        var three = MetricColumns.Arrange(auto, groups, 3);
+        Check(three.Sum(c => c.Count) == labels.Length, "Merging columns loses no metric");
+        Check(three.All(c => c.Count > 0) && three.SelectMany(c => c).SequenceEqual(Enumerable.Range(0, labels.Length)),
+            "Merged columns stay in order and none is left empty");
+
+        var one = MetricColumns.Arrange(auto, groups, 1);
+        Check(one[0].SequenceEqual(Enumerable.Range(0, labels.Length)), "One column keeps the full reading order");
+
+        // More columns than groups present: the spare ones stay free for explicit choices.
+        var eight = MetricColumns.Arrange(auto, groups, 8);
+        Check(eight.Sum(c => c.Count) == labels.Length && eight.Count(c => c.Count > 0) == 6,
+            "Spare columns are left empty rather than padded");
+
+        // An explicit choice still wins, and still folds in from beyond the visible count.
+        var mixed = new[] { 0, 2, 0, 0, 0, 0, 0, 0, 7 };
+        var placed = MetricColumns.Arrange(mixed, groups, 3);
+        Check(placed[1].Contains(1), "An explicit column is honoured");
+        Check(placed[2].Contains(8), "A column beyond the visible count folds into the last");
+        Check(placed.Sum(c => c.Count) == labels.Length, "Mixed placement still places every metric once");
+
+        Check(MetricColumns.Arrange(auto, 4).Sum(c => c.Count) == labels.Length,
+            "Ungrouped placement still deals every metric out");
     }
 
     private static void FittedRouteGraph()

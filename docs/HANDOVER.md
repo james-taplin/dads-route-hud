@@ -1,12 +1,12 @@
 # Development status
 
-Version 0.3.9 is a test candidate, built, packaged and installed for testing on 20 October 2026,
-as were 0.3.1 to 0.3.8 before it. In-game acceptance of the readable list, the switch markers, the
+Version 0.4.0 is a test candidate, built, packaged and installed for testing on 20 October 2026,
+as were 0.3.1 to 0.3.9 before it. In-game acceptance of the readable list, the switch markers, the
 capture hold and the reverser-led direction is still pending. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
 
 The existing-instance signal-manager lookup performance correction is present. The periodic refresh correction keeps the last valid same-route signal view until its replacement is ready, rather than exposing a temporary native-only catalogue. Changes of route/vehicle/source invalidate old observations. In-game confirmation of the latest publication and GUI behavior remains pending.
 
-Automated checks of the current snapshot: zero-warning installed-reference compilation, 224
+Automated checks of the current snapshot: zero-warning installed-reference compilation, 242
 route/window/layout/naming checks, 14 conversion checks, and 51/51 metadata contracts. Public CI runs the
 two pure suites without proprietary references. Follow VALIDATION.md for actual game acceptance.
 Synthetic in-memory timings are not game performance measurements.
@@ -14,7 +14,7 @@ Synthetic in-memory timings are not game performance measurements.
 Publication intentionally starts from the original MIT HUD history with a source-only import. Koteq's compatibility work remains credited. No game DLLs, private settings, backups or local profiling evidence are included. Neither Rinzler's binary nor its implementation is used. See LICENSING.md for pinned notices.
 
 The public repository is behind this checkout: it holds the source import up to 0.2.0, and the
-0.2.1, 0.3.0 and the 0.3.1 to 0.3.9 commits are local only. No tag, release or binary has been published,
+0.2.1, 0.3.0 and the 0.3.1 to 0.4.0 commits are local only. No tag, release or binary has been published,
 and no pull request has been opened upstream. The GitHub default branch therefore does not match
 any installed build.
 
@@ -216,3 +216,26 @@ page buttons under the route list are styled the same way. The UMM settings pane
 skin, which is the host's to size.
 
 The dead attach actions left behind by this change are removed rather than left unreferenced.
+
+## Auto columns group like metrics (0.4.0)
+
+A metric left on Auto now follows what it is about instead of being dealt out in turn, so each
+column reads as a column of like things. The groups, in reading order, are what the train is doing
+(speed, acceleration, grade, altitude, mass, kinetic energy), the driving controls, the brakes,
+output, the engine, consumables, and native simulation ports. Brake controls and brake pressures
+deliberately share one group, because they are read together. Speed and grade lead rather than
+following the controls; that order is one list in MetricGroups and is easy to change.
+
+Only groups that actually have a metric on Auto take a column, so a locomotive without a boiler
+does not leave a gap. Present groups spread across whatever columns exist: with fewer columns than
+groups, neighbouring groups share one in order; with more, the spare columns are left free for
+explicit choices rather than padded. A metric with a saved column still keeps it, and a choice
+beyond the visible count still folds into the last column without losing the saved value.
+
+Metrics are matched by exact name, with a keyword rule behind it so a metric added by the game or
+another mod still lands somewhere sensible rather than being dropped, and native ports are
+recognised by their "Sim: " prefix. The classification is pure and tested, including that every
+metric is placed exactly once at one, three, six and eight columns.
+
+The settings panel's own group filter still uses its older Controls/Steam/Performance/Vehicle sets;
+those two taxonomies have not been unified.

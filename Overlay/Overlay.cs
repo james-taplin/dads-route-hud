@@ -234,9 +234,10 @@ namespace DvMod.HeadsUpDisplay
                     if (sampledCar != null && provider.TryGetFormatted(sampledCar, out var formatted) && !string.IsNullOrEmpty(formatted)) value = formatted;
                     metrics.Add((provider.Label, value, Styles.TextWidth(provider.Label, Styles.noWrap), Styles.TextWidth(value, Styles.noWrapBold)));
                 }
-            var assignments = settings.drivingInfoSettings.OrderedProviders()
-                .Select(p => settings.drivingInfoSettings.GetProviderSettings(p).column).ToArray();
-            metricColumns = MetricColumns.Arrange(assignments, columns);
+            var ordered = settings.drivingInfoSettings.OrderedProviders().ToArray();
+            var assignments = ordered.Select(p => settings.drivingInfoSettings.GetProviderSettings(p).column).ToArray();
+            var groups = ordered.Select(p => MetricGroups.Of(p.Label)).ToArray();
+            metricColumns = MetricColumns.Arrange(assignments, groups, columns);
             var used = 0f;
             for (var index = 0; index < metrics.Count; index++)
             {
