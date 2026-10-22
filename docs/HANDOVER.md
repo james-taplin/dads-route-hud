@@ -1,5 +1,11 @@
 # Development status
 
+Runtime caveat, 22 October 2026: a stale UMM shadow copy held 0.3.2 while later DLLs were
+installed. The on-disk DLL and regenerated shadow copy were verified to match 0.4.1; James then
+requested another cache clear before his next test, and no HUD cache remains. In-game acceptance
+of 0.3.3 through 0.4.1 remains outstanding; see the dated handover note below before debugging
+or installing another candidate. Logging is enabled for James's next drive.
+
 Version 0.4.1 is a test candidate, built, packaged and installed for testing on 20 October 2026,
 as were 0.3.1 to 0.4.0 before it. In-game acceptance of the readable list, the switch markers, the
 capture hold and the reverser-led direction is still pending. It combines compact columns and driving strip, independent draggable/resizable main and graph windows, per-window transparency, top-right initial placement and a configurable route horizon up to 50 km. All collected events remain retained; finite-pixel clusters and display filters do not truncate the complete catalogue.
@@ -259,3 +265,73 @@ windows, not only the detached ones, since they share the same window code.
 
 This is a visual change with no arithmetic to pin down, so the pure suites do not cover it. It needs
 the game to accept.
+
+## Return handover and stale UMM shadow copy - 22 October 2026
+
+Claude handed editing ownership back to Codex through bridge conversation tidy-hare. At handover,
+the public checkout was clean at 49308bf on codex/dads-route-hud, 14 commits ahead of origin.
+Claude reported no unfinished edits, active builds/tests, agents or scheduled work. Nothing was
+pushed. The private-history dads-route-hud checkout must never be merged into this public tree;
+leave dads-driving-hud alone. James runs the game tests; do not launch DV.
+
+Main carries [EnableReloading]. UMM keeps a DadsRouteHUD.dll.<n>.cache shadow copy in the installed
+mod directory. Claude reported that the running HUD still showed the old junction/track labels
+and detached Attach buttons while the installed DLL was 0.4.1. He removed the stale copy on
+22 October, preserving it in artifacts/backups/stale-umm-cache-20261022/. This explains why those
+recordings cannot validate the changes in 0.3.3 through 0.4.1. Codex has not independently reviewed
+the recording or observed the loaded game assembly.
+
+Codex independently checked the local files during handover:
+
+- The backed-up cache is assembly 0.3.2.0, byte-identical to the DLL in the 0.3.2 ZIP:
+  SHA256 70b6cbca879279ab1be032870a4f9f09e4035925bfd0cd45234d5c52d445a4cb.
+- The installed DLL and DadsRouteHUD.dll.14135.cache are both assembly 0.4.1.0 and byte-identical
+  to the DLL in the 0.4.1 ZIP:
+  SHA256 0ea8020b9959d253de25e388d009b9d1289e3316989272bbc667c1f964913e7c.
+- Installed Settings.xml contains windowPadding=4 and enableLogging=true. Its backup is at
+  artifacts/backups/settings-before-logging-20261022/Settings.xml. Comparing the parsed XML after
+  restoring enableLogging in memory gives an exact match: logging false -> true is the only
+  XML change. No installed files were changed during these handover checks.
+
+Before any future installation, close the game, preserve the mod/settings and UMM Params.xml,
+and remove stale DadsRouteHUD.dll.*.cache files from this mod's directory. After restarting,
+check the regenerated cache's assembly version and hash against the installed candidate DLL.
+The expected labels and newly persisted setting keys provide supporting runtime evidence;
+copying a new DLL alone does not establish that UMM loaded it. Do not remove unrelated mods'
+caches. Claude's installer existed only in his session scratchpad and did not clear the cache;
+there is no repo-resident installer yet. Add this safeguard before the next installation.
+
+With enableLogging on, Providers/RouteMonitorService.LogPublication logs changes to the published
+event count as "Route list N -> M events", conditionally followed by "; previous capture held",
+then "; optional signals: <status>". It skips the initial count. If visible movement occurs
+without a count-change line, that alone does not identify the cause: rows can change while the
+count stays fixed. The UMM inspector also exposes capture count and the last rebuild reason.
+
+Wait for James's next drive with the corrected cache and logging enabled before another flicker
+fix. The optional-signal Reset change is Claude's proposed explanation, not a runtime-confirmed
+fix. Readable names, switch markers, capture retention/direction behavior, header controls,
+grouped Auto columns and padding all still need game acceptance. Earlier release-section cause
+descriptions document implementation reasoning, not confirmation that those builds fixed the
+recorded symptoms.
+
+Claude also identified possible later cleanup: the long RouteMonitorService.Update method,
+PrepareLayout's hand-maintained flags, differing metric grouping taxonomies and apparently unused
+Overlay/EventList.cs. These are reported review candidates, not verified defects or authorization
+to refactor them. This handover changes documentation only.
+
+### Cache cleared again before James's game test - 22 October 2026
+
+At James's explicit request, Codex checked that DV was closed, backed up and removed
+DadsRouteHUD.dll.14135.cache from this mod's installed directory. The verified backup is in
+artifacts/backups/cache-cleared-before-game-test-20261022-193751/. This was the already-matching
+0.4.1 cache, cleared as a precaution. No DadsRouteHUD.dll.*.cache files remain there; UMM should
+regenerate the shadow copy on the next launch. Installed DLL and Settings.xml hashes were
+verified unchanged. Logging remains enabled and runtime acceptance is still pending.
+
+## Local history preservation - 22 October 2026
+
+At James's request, Codex recorded the existing returned handover and loaded-candidate checks as a present-day local documentation checkpoint. The starting source commit was `49308bf`, with 14 existing local commits beyond the cached `origin/codex/dads-route-hud` reference. Those commits are retained exactly; no history was rewritten or imported from the private-history HUD checkout.
+
+The complete working folder and Git database, including ignored packages, cache/settings backups and validation receipts, were independently backed up before this checkpoint. Both changed documents matched that backup by SHA256 before this preservation note. Ignored local evidence remains outside the source checkpoint.
+
+No build, game action, installation, push or release was performed. Runtime and visual acceptance remain pending as documented above. This preservation record does not authorise additional HUD changes or publication.

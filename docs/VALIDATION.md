@@ -2,6 +2,29 @@
 
 Automated build/core checks pass as recorded in HANDOVER.md. Runtime and visual acceptance are **not run**. This is a compiled test candidate, not a release-readiness claim.
 
+## Loaded candidate check - 22 October 2026
+
+A stale UMM shadow copy held assembly 0.3.2.0 while later DLLs were installed. The backed-up
+cache matches the 0.3.2 package; at handover the installed DLL and regenerated shadow copy both
+matched the 0.4.1 package. At James's request, that matching cache was backed up and cleared again
+before his next game test; no HUD cache remains until UMM regenerates it. These file checks do
+not replace in-game acceptance of 0.3.3 through 0.4.1.
+See HANDOVER.md for hashes, backups and the distinction between checked files and reported
+runtime evidence.
+
+Before a later install, close DV, back up the mod/settings and UMM Params.xml, and clear stale
+DadsRouteHUD.dll.*.cache files only in this mod's installed directory. After restarting, compare
+the regenerated cache version/hash with the installed DLL and confirm the candidate's labels
+and setting keys. Verify the loaded candidate before diagnosing its behavior.
+
+Logging is currently enabled in the installed Settings.xml, with the original backed up under
+artifacts/backups/settings-before-logging-20261022/. During James's next drive, watch for
+"Route list N -> M events" lines, their optional "previous capture held" qualifier and optional
+signal status. Record the UMM capture count and last rebuild reason if flicker persists.
+A quiet count-change log does not prove unchanged rows or explain visible movement. Evaluate
+the existing fixes with the corrected cache before changing more flicker code. James launches
+and tests the game.
+
 ## Repeatable automated checks
 
 ```powershell
