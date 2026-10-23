@@ -556,6 +556,14 @@ internal static class RouteCoreProgram
         Check(snapshot.Intervals.Count == 1 && snapshot.Events.Count == 50001
             && snapshot.Profile.Count == 2 && snapshot.Diagnostics.Count == 1,
             "Snapshot copies source collections before later incremental capture changes");
+        var refreshing = snapshot.WithStatus(true, "Refresh pending", "Reading signals");
+        Check(ReferenceEquals(refreshing.Events, snapshot.Events) && ReferenceEquals(refreshing.Intervals, snapshot.Intervals)
+            && ReferenceEquals(refreshing.Profile, snapshot.Profile) && ReferenceEquals(refreshing.Diagnostics, snapshot.Diagnostics),
+            "Status-only refresh shares immutable collections without duplicating the complete catalogue");
+        Check(refreshing.IsCollecting && refreshing.EventCoverage == "Refresh pending" && refreshing.SignalCoverage == "Reading signals"
+            && refreshing.Revision == snapshot.Revision && refreshing.UpdatedAtUtc == snapshot.UpdatedAtUtc
+            && refreshing.ReachedDistance == snapshot.ReachedDistance && !snapshot.IsCollecting,
+            "Status-only view preserves capture identity, time and geometry without mutating its source");
         var allPages = new List<RouteEvent>();
         var first = RoutePaging.GetPage(snapshot.Events, 0, 13);
         for (var page = 0; page < first.PageCount; page++)

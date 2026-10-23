@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using QuantitiesNet;
@@ -107,6 +106,9 @@ namespace DvMod.HeadsUpDisplay
             new List<(string, string, float, float)>();
         private readonly List<List<int>> metricRows = new List<List<int>>();
         private RoutePage<RouteEvent>? eventPage;
+        private readonly List<(string distance, string description)> eventRows = new List<(string, string)>();
+        private float eventDistanceWidth, eventDescriptionWidth;
+        private string eventHeading = "", eventPageLabel = "";
         private int requestedPage;
         private readonly Settings.TrainInfoSettings trainSettings = new Settings.TrainInfoSettings();
 
@@ -210,10 +212,10 @@ namespace DvMod.HeadsUpDisplay
                 settings.placeMetricsTopRight = false;
                 Main.RequestSettingsSave();
             }
-            innerWidth = Math.Max(1, mainRect.width - Styles.ContentInset);
-            metricsWidth = Math.Max(1, (layout.popOutMetrics ? metricsRect.width : mainRect.width) - Styles.ContentInset);
             fontSize = layout.fontSize;
             Styles.SetFontSize(fontSize, layout.windowPadding);
+            innerWidth = Math.Max(1, mainRect.width - Styles.ContentInset);
+            metricsWidth = Math.Max(1, (layout.popOutMetrics ? metricsRect.width : mainRect.width) - Styles.ContentInset);
             background = layout.backgroundOpacity; content = layout.contentOpacity;
             graphBackground = layout.graphBackgroundOpacity; graphContent = layout.graphContentOpacity;
             metricsBackground = layout.metricsBackgroundOpacity; metricsContent = layout.metricsContentOpacity;
@@ -232,26 +234,46 @@ namespace DvMod.HeadsUpDisplay
             sampledCar = PlayerManager.Car ? PlayerManager.Car : PlayerManager.LastLoco;
             identity = (metricsDetached && layout.popOutGraph ? "DETAILS" : compact ? "HUD" : "DRIVING") + (sampledCar != null ? $"  {sampledCar.ID}  {sampledCar.carType}" : "  No locomotive selected");
             CopyTrainSettings();
-            summary = BuildTrainSummary();
-            if (dockGraph || showGraph)
-                RouteMonitor.PrepareLayout(RouteMonitorService.Current,
+            summary = showMain ? BuildTrainSummary() : "";
+            if (showMain && drawCarList) CarList.PrepareLayout(trainSettings);
+            var route = RouteMonitorService.Current;
+            if ((showMain && dockGraph) || showGraph)
+                RouteMonitor.PrepareLayout(route,
                     showGraph ? graphRect.width - Styles.ContentInset : innerWidth, fontSize, layout);
-            if (showEvents)
+            if (showMain && showEvents) CaptureEventRows(route, layout.inspectorPageSize);
+            CaptureMetrics(settings.drivingInfoSettings);
+            layoutReady = true;
+        }
+        private void CaptureEventRows(RouteSnapshot<RailTrack> route, int pageSize)
+        {
+            var visible = route.Events.Where(RouteMonitor.IsVisible).ToArray();
+            eventPage = RoutePaging.GetPage(visible, requestedPage, pageSize);
+            requestedPage = eventPage.PageIndex;
+            eventHeading = $"Route events  {eventPage.TotalCount} displayed / {route.Events.Count} retained";
+            eventPageLabel = $"Page {(eventPage.PageCount == 0 ? 0 : eventPage.PageIndex + 1)} / {eventPage.PageCount}";
+            eventRows.Clear();
+            eventDistanceWidth = 0;
+            foreach (var item in eventPage.Items)
             {
-                var visible = RouteMonitorService.Current.Events.Where(RouteMonitor.IsVisible).ToArray();
-                eventPage = RoutePaging.GetPage(visible, requestedPage, layout.inspectorPageSize);
-                requestedPage = eventPage.PageIndex;
+                var distance = RouteMonitor.EventDistance(item.Distance);
+                eventRows.Add((distance, RouteListText.Description(item)));
+                eventDistanceWidth = Mathf.Max(eventDistanceWidth, Styles.TextWidth(distance, Styles.rightAlign));
             }
+            eventDistanceWidth = Mathf.Min(eventDistanceWidth, Mathf.Max(1, innerWidth - ColumnSpacing - 1));
+            eventDescriptionWidth = Mathf.Max(1, innerWidth - eventDistanceWidth - ColumnSpacing);
+        }
+        private void CaptureMetrics(Settings.DrivingInfoSettings settings)
+        {
             metrics.Clear(); metricRows.Clear();
-            if (drawMetrics)
-                foreach (var provider in settings.drivingInfoSettings.OrderedProviders().ToArray())
-                {
-                    var value = "--";
-                    if (sampledCar != null && provider.TryGetFormatted(sampledCar, out var formatted) && !string.IsNullOrEmpty(formatted)) value = formatted;
-                    metrics.Add((provider.Label, value, Styles.TextWidth(provider.Label, Styles.noWrap), Styles.TextWidth(value, Styles.noWrapBold)));
-                }
-            var ordered = settings.drivingInfoSettings.OrderedProviders().ToArray();
-            var assignments = ordered.Select(p => settings.drivingInfoSettings.GetProviderSettings(p).column).ToArray();
+            if (!showMetrics && !(showMain && dockMetrics)) return;
+            var ordered = settings.OrderedProviders().ToArray();
+            foreach (var provider in ordered)
+            {
+                var value = "--";
+                if (sampledCar != null && provider.TryGetFormatted(sampledCar, out var formatted) && !string.IsNullOrEmpty(formatted)) value = formatted;
+                metrics.Add((provider.Label, value, Styles.TextWidth(provider.Label, Styles.noWrap), Styles.TextWidth(value, Styles.noWrapBold)));
+            }
+            var assignments = ordered.Select(p => settings.GetProviderSettings(p).column).ToArray();
             var groups = ordered.Select(p => MetricGroups.Of(p.Label)).ToArray();
             metricColumns = MetricColumns.Arrange(assignments, groups, columns);
             var used = 0f;
@@ -263,7 +285,6 @@ namespace DvMod.HeadsUpDisplay
                 metricRows[metricRows.Count - 1].Add(index);
                 used += (used > 0 ? ColumnSpacing : 0) + cellWidth;
             }
-            layoutReady = true;
         }
         private void DrawMainContent()
         {
@@ -271,12 +292,7 @@ namespace DvMod.HeadsUpDisplay
             if (dockGraph) { GUILayout.Space(4); RouteMonitor.DrawPassive(); }
             if (showEvents) DrawEvents();
             if (summary.Length > 0) { GUILayout.Space(4); GUILayout.Label(summary, Styles.noWrap, GUILayout.Width(innerWidth)); }
-            if (drawCarList && sampledCar?.trainset != null)
-            {
-                var live = Main.settings.trainInfoSettings;
-                try { Main.settings.trainInfoSettings = trainSettings; CarList.DrawCarList(sampledCar.trainset); }
-                finally { Main.settings.trainInfoSettings = live; }
-            }
+            if (drawCarList) CarList.DrawCarList();
         }
         private void DrawMetrics()
         {
@@ -319,7 +335,7 @@ namespace DvMod.HeadsUpDisplay
         {
             if (eventPage == null) return;
             GUILayout.Space(4);
-            GUILayout.Label($"Route events  {eventPage.TotalCount} displayed / {RouteMonitorService.Current.Events.Count} retained", Styles.noWrapBold, GUILayout.Width(innerWidth));
+            GUILayout.Label(eventHeading, Styles.noWrapBold, GUILayout.Width(innerWidth));
             GUILayout.BeginHorizontal();
             var enabled = GUI.enabled;
             GUI.enabled = enabled && eventPage.PageIndex > 0;
@@ -327,24 +343,16 @@ namespace DvMod.HeadsUpDisplay
             GUI.enabled = enabled && eventPage.PageIndex + 1 < eventPage.PageCount;
             if (GUILayout.Button("Next", Styles.button, GUILayout.ExpandWidth(false))) requestedPage++;
             GUI.enabled = enabled;
-            GUILayout.Label($"Page {(eventPage.PageCount == 0 ? 0 : eventPage.PageIndex + 1)} / {eventPage.PageCount}", Styles.noWrap);
+            GUILayout.Label(eventPageLabel, Styles.noWrap);
             GUILayout.EndHorizontal();
             // Dad's Driving HUD's measured distance + description layout. Keep the entire
             // retained catalogue and paging, but leave source diagnostics in the inspector.
-            var rows = eventPage.Items.Select(item => (Distance: RouteMonitor.EventRow(item).Distance,
-                Description: RouteListText.Description(item))).ToArray();
-            var distanceWidth = 0f;
-            foreach (var row in rows)
-                distanceWidth = Mathf.Max(distanceWidth, Styles.TextWidth(row.Distance, Styles.rightAlign));
-            distanceWidth = Mathf.Min(distanceWidth, Mathf.Max(1, innerWidth - ColumnSpacing - 1));
-            var descriptionWidth = Mathf.Max(1, innerWidth - distanceWidth - ColumnSpacing);
-            for (var index = 0; index < rows.Length; index++)
+            foreach (var row in eventRows)
             {
-                var row = rows[index];
                 GUILayout.BeginHorizontal(GUILayout.Width(innerWidth));
-                GUILayout.Label(row.Distance, Styles.rightAlign, GUILayout.Width(distanceWidth));
+                GUILayout.Label(row.distance, Styles.rightAlign, GUILayout.Width(eventDistanceWidth));
                 GUILayout.Space(ColumnSpacing);
-                GUILayout.Label(row.Description, Styles.richText, GUILayout.Width(descriptionWidth));
+                GUILayout.Label(row.description, Styles.richText, GUILayout.Width(eventDescriptionWidth));
                 GUILayout.EndHorizontal();
             }
         }
@@ -366,17 +374,9 @@ namespace DvMod.HeadsUpDisplay
                 ? $"{new Quantities.Length(train.OverallLength()).In(Foot):F0} ft" : $"{train.OverallLength():F0} m";
             return $"Train  {train.cars.Count} cars  {length}  {train.TotalMass() / 1000:F0} t";
         }
-        public static void DrawColumn<T>(IEnumerable<T> cells, string? label = null, Func<T, string>? renderer = null, GUIStyle? style = null)
-        {
-            renderer ??= x => x!.ToString(); style ??= Styles.noWrap;
-            GUILayout.Space(ColumnSpacing); GUILayout.BeginVertical();
-            if (label != null) GUILayout.Label(label, style);
-            foreach (var cell in cells) GUILayout.Label(renderer(cell), style);
-            GUILayout.EndVertical();
-        }
         public void ResetPosition() { Release(); layoutReady = false; }
         private void Release() { mainWindow.Release(); graphWindow.Release(); metricsWindow.Release(); }
         public void OnDisable() { Release(); layoutReady = false; if (instance == this) instance = null; }
-        public void OnApplicationQuit() => Main.SavePendingSettings();
+        public void OnApplicationQuit() => Main.SavePendingSettings(force: true);
     }
 }

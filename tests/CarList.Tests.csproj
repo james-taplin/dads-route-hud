@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+    <LangVersion>8.0</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Overlay/CarList.cs" />
+    <Compile Include="../Providers/DrivingMath.cs" />
+    <Compile Include="CarListStubs.cs" />
+    <Compile Include="CarListProgram.cs" />
+    <ProjectReference Include="QuantitiesNet.Source.csproj" />
+  </ItemGroup>
+</Project>

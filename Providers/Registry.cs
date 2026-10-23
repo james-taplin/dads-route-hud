@@ -1,7 +1,6 @@
 using QuantitiesNet;
 using System;
 using System.Collections.Generic;
-using System.Linq;
 
 namespace DvMod.HeadsUpDisplay
 {
@@ -16,7 +15,7 @@ namespace DvMod.HeadsUpDisplay
         public static void Register(IDataProvider dp)
         {
             var settings = Main.settings.drivingInfoSettings;
-            var alreadyConfigured = settings.providerSettings.Any(p => p.providerLabel == dp.Label);
+            var alreadyConfigured = settings.HasProviderSettings(dp.Label);
             providers[dp.Label] = dp;
             settings.EnsureProviderSettings(dp);
             // Discovering a new value must not silently expand an existing driving layout.

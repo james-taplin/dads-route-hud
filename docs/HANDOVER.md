@@ -1,5 +1,9 @@
 # Development status
 
+Refactor candidate 0.5.0 is developed separately on codex/route-hud-refactor from the completed
+0.4.2 checkpoint bb92b42. It has not replaced the installed 0.4.2 candidate. See the final refactor
+section below; older candidate status and acceptance notes are retained as history.
+
 23 October 2026: James requested keeping the other Route HUD changes while restoring the compact
 Dad's Driving HUD list and addressing the alternating datasets. Candidate 0.4.2 implements that
 request. The 0.4.1 runtime log now exists; the old instruction to wait for that drive is satisfied.
@@ -395,3 +399,98 @@ Only this HUD's backed-up shadow cache was cleared. No game launch or runtime ac
 The final package/installed handover includes this installation note; the receipt records final
 package and installed-file hashes. The runtime cause of the remaining partial diagnostic, and
 whether any additional flicker cause exists, must still be checked from the next game run.
+
+## Lightweight refactor and independent review - 23 October 2026 (0.5.0)
+
+James requested a full code refactor on a new branch, thorough error/performance checks, and agents
+for research and independent review. The finished compact-list/capture-origin fix was checkpointed
+as bb92b42 on codex/dads-route-hud before creating codex/route-hud-refactor. The installed 0.4.2,
+its Settings.xml and UMM flags are preserved; no refactor installation or game launch is authorised
+by the build/package workflow. No history from the private DLL-containing checkout was imported.
+
+Three agents covered capture/optional lifecycle, UI/car-list/settings, and independent native/pure/
+installer review. Native SignPlacer/RailTrack sources and working Mapify/DoubleTrack examples were
+checked; they support the existing adapters. No new runtime dependency, hook, service, input binding,
+profiling mode or observation cap was needed. Small pure helpers that were already clear were kept.
+
+Confirmed defects corrected:
+
+- A changed selected path could keep the old display while collecting a replacement; hard route
+  invalidation now clears obsolete facts. Path changes before publication reject that capture.
+- Geometry regenerated during collection could produce a mixed sample; it now retries while holding
+  only a still-usable same-route capture. Reverser primacy and the 0.4.2 origin correction remain.
+- Optional holds compared assemblies that outlive scenes. They now identify actual existing native
+  manager/traffic instances, without creating singletons or searching the scene.
+- Grouped brake-pipe minima wrote into the reservoir field; the correct field now updates. An
+  uncoupled front coupler could throw before the valid rear link was checked; both are nullable.
+- Car-list data survived train changes and was collected during IMGUI. Update now captures formatted
+  rows at the saved cadence; Layout freezes rows/columns. Endpoints/count/group/train changes refresh
+  immediately, while an internal equal-count reorder is reflected at the next saved period.
+- Failed deferred layout saves lost the pending change. They now remain pending with a five-second
+  retry interval and a forced final attempt on unload/quit. Native sampling waits for world readiness.
+- Installer PE/version validation occurred after replacement. It now preflights in staging, backs up
+  and verifies the original installation, and restores affected files/caches on a failed upgrade.
+  A restore failure accurately reports the retained backup; settings and UMM flags are never written.
+- The artifact audit now rejects duplicate ZIP entry names as well as unexpected files/counts.
+
+Performance/structure changes:
+
+- Capture scheduling, incremental collection, publication and error handling have named boundaries.
+  Held replacements are not merged/sorted, and status-only views share immutable capture collections.
+- Event row formatting/measurement is frozen at Layout, hidden metric windows are not sampled, and
+  selected providers are enumerated once. Native car/job collection is outside drawing.
+- Provider settings use a private lookup index while the ordered serialized list remains unchanged;
+  raw-port discovery no longer repeats full settings scans. All 75 serializable Settings field
+  candidates and 76 public instance fields across six classes match installed 0.4.2 exactly.
+- Native signs are indexed by known track instead of scanning every global sign for each track.
+  Matching uses existing cached content signatures. Exact association, five-second discovery and
+  explicit partial coverage remain; no nearest-track guessing or source streaming was added.
+- Shifted views binary-search passed events and size only the remaining event list. An initial
+  profile/interval preallocation caused a near-tail allocation regression in a synthetic benchmark;
+  that preallocation was removed before handoff. Do not repeat it without measuring near-tail cases.
+- The unused legacy EventList, TrackIndexer, TrackFollower and TrackEvent hierarchy were removed
+  after repository-wide caller checks. SignalTrackEvent is a standalone immutable observation.
+  Legacy maxEventCount remains serialized for compatibility and is not a collection cap.
+
+Validation and evidence:
+
+The installed-reference net48 build is warning-free. Eight suites contain 582 checks: 14 driving,
+252 route-core, 67 production-service lifecycle, 90 native-geometry boundary, 47 production sign-index,
+51 actual optional-adapter, 16 production-CarList and 45 telemetry/registry checks.
+The optional/native PE contract audit matches 51/51 members. The
+source-only QuantitiesNet test project uses the same pinned MIT source; CI needs no game assemblies.
+The installer fixture suite has 12 assertions covering actual package installation into a fake game,
+preserved settings/flags, backup/cache behavior, injected-copy rollback and preflight version rejection.
+An additional 51 checks compile the actual optional adapter and exercise reflection binding,
+continuation/cancellation, source replacement, all/opposing/distant heads, atomic refresh, partial
+diagnostics, occupancy/reservations and optional AI enrichment with boundary doubles. No new defect
+was found by that harness. Packaging and the identity/reference/exact 14-file artifact audit pass.
+Another 45 checks execute the actual telemetry/registry/query providers with native doubles and
+source-built QuantitiesNet: identity, component/port caching, raw discovery defaults, finite reads,
+resources/controls, acceleration cadence/gaps/rewinds and reset. No production defect was found.
+The 47 sign-index checks execute production placement/registration, per-track membership,
+captured/recipe precedence, ambiguity quarantine, parts/accessories, exact association, projection
+failure, content cache refresh, origin shift, pruning, destroyed objects and reset/unsubscription.
+This closes the changed sign-index boundary with test doubles; real native scene acceptance remains.
+Validate.ps1 is the single local validation entry point and writes build/validation-receipt.json;
+it builds/packages/tests and runs installer fixtures, without touching the actual installation.
+
+The candidate DLL is 187,392 bytes versus installed 0.4.2's 211,456 (about 11% smaller). In the
+controlled .NET 8 synthetic workload, status-only wrapping of 50,000 events allocates 104 bytes
+instead of roughly 453,201. Shifts allocate roughly 10% less at offsets 1 m and 25 km; the near-tail
+case also allocates less after correcting the initial capacity regression. These measurements do
+not establish game frame timing or Unity/net48 allocation gains. Baseline/current/provenance and
+raw batches remain in the ignored benchmark evidence, rather than a performance guarantee.
+
+Independent review found no remaining concrete introduced regression in the reviewed changes.
+Local evidence is under ignored build/: settings-contract-audit.json, refactor-benchmark-*.json and
+refactor-benchmark-summary.txt, plus installer fixture folders and the normal build/audit receipts.
+Synthetic .NET 8 timings/allocations are not Unity/net48 frame-time measurements. Runtime acceptance
+of visuals, optional combinations, real signal stability and frame timing remains James's game test.
+Terminal/dead-end/loop closing-edge changes retain the existing scheduled-refresh detection bound;
+adjacent captured-edge validation stays incremental. Native/reflection calls cannot be pre-empted.
+
+Final candidate remains local to codex/route-hud-refactor; no push, release, merge or refactor
+installation occurred. The installed 0.4.2 DLL remains byte-identical. Latest complete validation
+and package hashes are in build/validation-receipt.json, build/unified-artifact-audit.json and the
+artifact SHA256 sidecar. Settings field-contract evidence was also rechecked against the final DLL.

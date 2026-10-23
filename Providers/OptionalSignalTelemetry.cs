@@ -32,13 +32,18 @@ namespace DvMod.HeadsUpDisplay
         private static ReadPass? pass;
         private static bool reportedFailure;
         private static readonly HashSet<string> loggedProblems = new HashSet<string>();
+        private static readonly Stopwatch frameTimer = new Stopwatch();
+        private static UnityEngine.Object? signalSource, trafficManagerSource;
+        private static object? trafficGraphSource, trafficSourceIdentity;
 
         public static IReadOnlyList<SignalTrackEvent> UpcomingSignals => readings;
         public static IReadOnlyList<string> Diagnostics => diagnostics;
         public static bool IsComplete { get; private set; }
         public static bool IsReading => work != null;
-        internal static Assembly? ActiveSignalSource => signalsAssembly;
-        internal static Assembly? ActiveTrafficSource => trafficAssembly;
+        // Assemblies survive scene reloads. Holds must identify the actual existing sources,
+        // otherwise a new scene's manager could borrow the previous scene's observations.
+        internal static object? ActiveSignalSource => signalSource;
+        internal static object? ActiveTrafficSource => trafficSourceIdentity;
         public static bool IsAvailable => managerType != null;
         public static float SampledAt { get; private set; }
         public static string Status { get; private set; } = "Signals unavailable";
@@ -104,26 +109,26 @@ namespace DvMod.HeadsUpDisplay
                     : SampledAt > 0 ? "Refreshing optional signals; previous sample retained"
                     : "Reading optional signals; observations partial";
             }
-            var timer = Stopwatch.StartNew();
+            frameTimer.Restart();
             try
             {
                 do
                 {
                     if (!work.MoveNext())
                     {
-                        Publish(pass!, true);
+                        Publish(pass!);
                         Cancel();
                         nextRead = Time.realtimeSinceStartup + 0.5f;
                         return;
                     }
                     if (++pass!.Steps >= CorruptEnumerationWatchdog)
                         throw new InvalidOperationException("Optional enumeration watchdog reached");
-                } while (timer.Elapsed.TotalMilliseconds < 2);
+                } while (frameTimer.Elapsed.TotalMilliseconds < 2);
             }
             catch (Exception exception)
             {
                 pass!.Problems.Add("Optional data partial: " + exception.GetBaseException().Message);
-                Publish(pass, true);
+                Publish(pass);
                 Cancel();
                 nextRead = Time.realtimeSinceStartup + 0.5f;
                 if (!reportedFailure)
@@ -135,16 +140,18 @@ namespace DvMod.HeadsUpDisplay
         }
 
         private static void Cancel() { work?.Dispose(); work = null; pass = null; }
-        private static void Publish(ReadPass result, bool finished)
+        private static void Publish(ReadPass result)
         {
             result.Signals.Sort((a, b) => a.span.CompareTo(b.span));
             readings = result.Signals.ToArray();
-            reservations = new Dictionary<RailTrack, string>(result.Reservations);
+            // ReadPass is retired immediately after publication; hand over its dictionary
+            // rather than duplicate every reservation on each half-second refresh.
+            reservations = result.Reservations;
             diagnostics = result.Problems.ToArray();
             if (Main.settings.enableLogging)
                 foreach (var problem in diagnostics)
                     if (loggedProblems.Add(problem)) Main.mod?.Logger.Log("Optional signal diagnostic: " + problem);
-            IsComplete = finished && result.Problems.Count == 0;
+            IsComplete = result.Problems.Count == 0;
             SampledAt = Time.realtimeSinceStartup;
             Status = managerType == null ? "DVSignals not active; optional facts unavailable"
                 : result.Problems.Count > 0 ? "Optional signals partial (" + result.Problems.Count + " diagnostics)"
@@ -167,7 +174,7 @@ namespace DvMod.HeadsUpDisplay
             if (managerType == null) yield break;
             // Read the native existing-instance slot. The public Instance getter can
             // create a manager, and a repeated scene-wide Find is synchronous work.
-            var manager = signalManagerInstance?.GetValue(null) as UnityEngine.Object;
+            var manager = signalSource;
             if (manager == null) { result.Problems.Add("DVSignals manager unavailable"); yield break; }
             if (!managerType.IsInstanceOfType(manager))
             { result.Problems.Add("DVSignals singleton instance type is incompatible"); yield break; }
@@ -270,7 +277,7 @@ namespace DvMod.HeadsUpDisplay
         }
         private static string ReadReservationOwner(RailTrack track)
         {
-            var graph = graphInstance?.GetValue(null);
+            var graph = trafficGraphSource;
             if (graph != null && graphHolder != null)
             {
                 var args = new object?[] { track, null, null };
@@ -281,7 +288,7 @@ namespace DvMod.HeadsUpDisplay
             var signalArgs = new object?[] { track, null };
             if (!(isTrackReserved.Invoke(null, signalArgs) is bool reserved) || !reserved) return string.Empty;
             // The helper calls TrafficManager.Instance internally; require an existing manager.
-            if (signalArgs[1] != null && trafficInstance?.GetValue(null) is UnityEngine.Object manager && manager != null
+            if (signalArgs[1] != null && trafficManagerSource != null
                 && aiSignalReservation != null && aiSignalReservation.Invoke(null, new[] { signalArgs[1] }) is bool ai && ai)
                 return "AI reserved";
             return "Reserved; owner unknown";
@@ -293,7 +300,34 @@ namespace DvMod.HeadsUpDisplay
             var traffic = UnityModManager.FindMod("AITraffic");
             var loadedSignals = signals != null && signals.Active ? signals.Assembly : null;
             var loadedTraffic = traffic != null && traffic.Active ? traffic.Assembly : null;
-            if (ReferenceEquals(signalsAssembly, loadedSignals) && ReferenceEquals(trafficAssembly, loadedTraffic)) return false;
+            var bindingsChanged = !ReferenceEquals(signalsAssembly, loadedSignals)
+                || !ReferenceEquals(trafficAssembly, loadedTraffic);
+            if (bindingsChanged) BindAssemblies(loadedSignals, loadedTraffic);
+
+            var manager = ExistingObject(signalManagerInstance);
+            var trafficManager = ExistingObject(trafficInstance);
+            var trafficGraph = graphInstance?.GetValue(null);
+            var sourceChanged = !ReferenceEquals(signalSource, manager)
+                || !ReferenceEquals(trafficManagerSource, trafficManager)
+                || !ReferenceEquals(trafficGraphSource, trafficGraph);
+            if (sourceChanged)
+            {
+                signalSource = manager;
+                trafficManagerSource = trafficManager;
+                trafficGraphSource = trafficGraph;
+                trafficSourceIdentity = trafficManager == null && trafficGraph == null ? null : new object();
+            }
+            return bindingsChanged || sourceChanged;
+        }
+
+        private static UnityEngine.Object? ExistingObject(FieldInfo? field)
+        {
+            var source = field?.GetValue(null) as UnityEngine.Object;
+            return source != null ? source : null; // Unity's destroyed-object semantics.
+        }
+
+        private static void BindAssemblies(Assembly? loadedSignals, Assembly? loadedTraffic)
+        {
             ClearBindings();
             signalsAssembly = loadedSignals;
             trafficAssembly = loadedTraffic;
@@ -322,7 +356,6 @@ namespace DvMod.HeadsUpDisplay
             var graphType = loadedTraffic?.GetType("AITraffic.Navigation.RailGraph", false);
             graphInstance = graphType?.GetField("s_instance", BindingFlags.NonPublic | BindingFlags.Static);
             graphHolder = graphType?.GetMethod("TryGetTrackReservationHolder", BindingFlags.Public | BindingFlags.Instance);
-            return true;
         }
         private static void ClearBindings()
         {
@@ -331,6 +364,8 @@ namespace DvMod.HeadsUpDisplay
             isTrackReserved = isTrackOccupied = aiAspectName = aiAspectColor = aiSignalName = aiSignalReservation = graphHolder = null;
             occupancyMode = null;
             trafficInstance = graphInstance = signalManagerInstance = null;
+            signalSource = trafficManagerSource = null;
+            trafficGraphSource = trafficSourceIdentity = null;
         }
         private static string SourceId(object source, string prefix)
             => "dvsignals:" + prefix + ":" + (Read(source, "Id")?.ToString() ?? RuntimeHelpers.GetHashCode(source).ToString(System.Globalization.CultureInfo.InvariantCulture));

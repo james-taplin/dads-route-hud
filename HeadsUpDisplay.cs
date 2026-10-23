@@ -14,11 +14,14 @@ namespace DvMod.HeadsUpDisplay
         public static GameObject? behaviourRoot;
         private static bool unloaded;
         private static bool settingsSavePending;
+        private static float nextSettingsSave;
 
         public static bool Load(UnityModManager.ModEntry modEntry)
         {
             mod = modEntry;
             unloaded = false;
+            settingsSavePending = false;
+            nextSettingsSave = 0;
             try { settings = Settings.Load<Settings>(modEntry) ?? new Settings(); }
             catch (Exception exception)
             {
@@ -53,20 +56,29 @@ namespace DvMod.HeadsUpDisplay
         private static void OnSaveGui(UnityModManager.ModEntry modEntry) => settings.Save(modEntry);
 
         internal static void RequestSettingsSave() => settingsSavePending = true;
-        internal static void SavePendingSettings()
+        internal static void SavePendingSettings(bool force = false)
         {
-            if (!settingsSavePending || mod == null) return;
-            settingsSavePending = false;
-            try { settings.Save(mod); }
-            catch (Exception exception) { mod.Logger.Warning("Could not save window layout: " + exception.Message); }
+            if (!settingsSavePending || mod == null || (!force && Time.realtimeSinceStartup < nextSettingsSave)) return;
+            try { settings.Save(mod); settingsSavePending = false; }
+            catch (Exception exception)
+            {
+                nextSettingsSave = Time.realtimeSinceStartup + 5;
+                mod.Logger.Warning("Could not save window layout; will retry: " + exception.Message);
+            }
+        }
+
+        private static void ResetTelemetry()
+        {
+            NativeTelemetry.Reset();
+            OptionalSignalTelemetry.Reset();
+            RouteMonitorService.Reset();
+            CarList.Reset();
         }
 
         private static bool OnToggle(UnityModManager.ModEntry modEntry, bool value)
         {
             enabled = value;
-            NativeTelemetry.Reset();
-            OptionalSignalTelemetry.Reset();
-            RouteMonitorService.Reset();
+            ResetTelemetry();
             NativeRouteSignIndex.Prune();
             return true;
         }
@@ -76,25 +88,28 @@ namespace DvMod.HeadsUpDisplay
             if (!enabled || unloaded) return;
             SavePendingSettings();
             var car = PlayerManager.Car ?? PlayerManager.LastLoco;
-            NativeTelemetry.Update(car);
-            if (settings.trackInfoSettings.enabled && AStartGameData.carsAndJobsLoadingFinished && WorldStreamingInit.IsLoaded)
+            var worldReady = AStartGameData.carsAndJobsLoadingFinished && WorldStreamingInit.IsLoaded;
+            NativeTelemetry.Update(worldReady ? car : null);
+            CarList.Update(worldReady ? car : null);
+            if (settings.trackInfoSettings.enabled && worldReady)
             {
                 RouteMonitorService.Update(car);
             }
             else
             {
-                OptionalSignalTelemetry.Reset();
-                if (RouteMonitorService.IsActive)
+                if (RouteMonitorService.IsActive || OptionalSignalTelemetry.IsAvailable
+                    || OptionalSignalTelemetry.IsReading || OptionalSignalTelemetry.SampledAt > 0)
+                {
+                    OptionalSignalTelemetry.Reset();
                     RouteMonitorService.Reset();
+                }
             }
         }
 
         private static void OnLoadingFinished()
         {
             if (unloaded) return;
-            NativeTelemetry.Reset();
-            OptionalSignalTelemetry.Reset();
-            RouteMonitorService.Reset();
+            ResetTelemetry();
             NativeRouteSignIndex.Prune();
             if (behaviourRoot != null) return;
             behaviourRoot = new GameObject("DadsRouteHUD");
@@ -103,15 +118,13 @@ namespace DvMod.HeadsUpDisplay
 
         private static bool OnUnload(UnityModManager.ModEntry modEntry)
         {
-            SavePendingSettings();
+            SavePendingSettings(force: true);
             unloaded = true;
             WorldStreamingInit.LoadingFinished -= OnLoadingFinished;
             if (behaviourRoot != null) UnityEngine.Object.Destroy(behaviourRoot);
             behaviourRoot = null;
             Overlay.instance = null;
-            NativeTelemetry.Reset();
-            OptionalSignalTelemetry.Reset();
-            RouteMonitorService.Reset();
+            ResetTelemetry();
             NativeRouteSignIndex.Reset();
             Registry.providers.Clear();
             new Harmony(modEntry.Info.Id).UnpatchAll(modEntry.Info.Id);

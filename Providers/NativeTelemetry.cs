@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using DV.Simulation.Cars;
 using DV.Simulation.Controllers;
 using LocoSim.Implementations;
@@ -140,10 +139,7 @@ namespace DvMod.HeadsUpDisplay
             var id = port.id;
             var label = $"Sim: {id} [{port.valueType}]";
             if (Registry.providers.ContainsKey(label)) return;
-            var settings = Main.settings.drivingInfoSettings;
-            var known = settings.providerSettings.Any(p => p.providerLabel == label);
             Registry.Register(new FloatQueryDataProvider(label, car => PortValue(car, id), value => value.ToString("G6")));
-            if (!known) settings.disabledProviders.Add(label);
             // Raw values retain their native representation. PortValueType alone does not
             // specify physical units: WATER and TEMPERATURE also describe normalized ports.
         }

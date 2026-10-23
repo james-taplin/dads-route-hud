@@ -9,7 +9,6 @@ using DV.ThingTypes;
 using DV.Utils;
 using QuantitiesNet;
 using UnityEngine;
-using UnityModManagerNet;
 using static QuantitiesNet.Quantities;
 
 namespace DvMod.HeadsUpDisplay
@@ -31,8 +30,6 @@ namespace DvMod.HeadsUpDisplay
             public readonly Pressure maxBrakeCylinderPressure;
             public readonly float maxBrakeFactor;
 
-            public readonly List<char> brakeModes;
-
             public CarGroup(
                 int startIndex,
                 int endIndex,
@@ -44,8 +41,7 @@ namespace DvMod.HeadsUpDisplay
                 Pressure minBrakePipePressure,
                 Pressure minBrakeReservoirPressure,
                 Pressure maxBrakeCylinderPressure,
-                float maxBrakeFactor,
-                IEnumerable<char> brakeModes)
+                float maxBrakeFactor)
             {
                 this.startIndex = startIndex;
                 this.endIndex = endIndex;
@@ -58,18 +54,10 @@ namespace DvMod.HeadsUpDisplay
                 this.minBrakeReservoirPressure = minBrakeReservoirPressure;
                 this.maxBrakeCylinderPressure = maxBrakeCylinderPressure;
                 this.maxBrakeFactor = maxBrakeFactor;
-                this.brakeModes = brakeModes.ToList();
-                if (this.brakeModes.Count == 0)
-                    this.brakeModes.Add(' ');
-            }
-
-            public override string ToString()
-            {
-                return $"{startIndex}-{endIndex} {string.Join(",", cars.Select(c => c.ID))} {maxStress} {job?.ID}";
             }
         }
 
-        private static float? GetCouplerStress(IEnumerable<TrainCar> cars, int index)
+        private static float? GetCouplerStress(IReadOnlyList<TrainCar> cars, int index)
         {
             if (index == 0)
                 return null;
@@ -78,14 +66,14 @@ namespace DvMod.HeadsUpDisplay
             if (!(Registry.GetProvider("Rear coupler") is DataProvider<float> rearCouplerProvider))
                 return null;
 
-            var frontCar = cars.ElementAt(index - 1);
-            var rearCar = cars.ElementAt(index);
+            var frontCar = cars[index - 1];
+            var rearCar = cars[index];
             static bool IsFrontCoupledTo(TrainCar car, TrainCar attached) =>
-                /*car.frontCoupler.springyCJ &&*/ car.frontCoupler.coupledTo.train == attached;
+                car.frontCoupler?.coupledTo?.train == attached;
             static bool IsRearCoupledTo(TrainCar car, TrainCar attached) =>
-                /*car.rearCoupler.springyCJ &&*/ car.rearCoupler?.coupledTo?.train == attached;
+                car.rearCoupler?.coupledTo?.train == attached;
 
-            (TrainCar car, bool isFront) FindCoupler()
+            (TrainCar? car, bool isFront) FindCoupler()
             {
                 if (IsFrontCoupledTo(frontCar, rearCar))
                     return (frontCar, true);
@@ -95,30 +83,16 @@ namespace DvMod.HeadsUpDisplay
                     return (rearCar, true);
                 else if (IsRearCoupledTo(rearCar, frontCar))
                     return (rearCar, false);
-                throw new System.InvalidOperationException("Could not find coupler link between cars");
+                // A consist can be observed between native coupling/uncoupling updates.
+                return (null, false);
             }
 
             var (carWithCoupler, isFront) = FindCoupler();
+            if (carWithCoupler == null) return null;
             var provider = isFront ? frontCouplerProvider : rearCouplerProvider;
             if (provider.TryGetValue(carWithCoupler, out var stress))
                 return stress;
             return null;
-        }
-
-        private static Pressure GetPressure(IDataProvider? provider, TrainCar car)
-        {
-            switch (provider)
-            {
-                case DataProvider<Quantity<Dimensions.Pressure>> quantityProvider:
-                    if (quantityProvider.TryGetValue(car, out var quantity) && quantity is Pressure pressure)
-                        return pressure;
-                    break;
-                case DataProvider<float> floatProvider:
-                    if (floatProvider.TryGetValue(car, out var v))
-                        return new Pressure(v, QuantitiesNet.Units.Bar);
-                    break;
-            }
-            return new Pressure();
         }
 
         private static Pressure GetAuxReservoirPressure(TrainCar car)
@@ -133,42 +107,29 @@ namespace DvMod.HeadsUpDisplay
             return new Pressure(DrivingMath.GaugePressure(car.brakeSystem.brakeCylinderPressure), QuantitiesNet.Units.Bar);
         }
 
-        private static char GetTripleValveState(TrainCar car)
+        private static IEnumerable<CarGroup> GetCarGroups(IReadOnlyList<TrainCar> cars, bool individual)
         {
-            if (Registry.GetProvider("Triple valve mode") is DataProvider<float> provider
-                && provider.TryGetValue(car, out var v))
-            {
-                return (char)v;
-            }
-            return default;
-        }
-
-        private static IEnumerable<CarGroup> GetCarGroups(IEnumerable<TrainCar> cars, bool individual)
-        {
+            if (cars.Count == 0) yield break;
             Job? prevJob = null;
             Track? prevDestTrack = null;
             int startIndex = 0;
             float maxStress = 0f;
             float? maxCouplerStress = null;
 
-            var firstCar = cars.First();
+            var firstCar = cars[0];
             var groupCars = new List<TrainCar>() { firstCar };
             Pressure minBrakePipePressure = new Pressure(DrivingMath.GaugePressure(firstCar.brakeSystem.brakePipePressure), QuantitiesNet.Units.Bar);
             Pressure minBrakeReservoirPressure = GetAuxReservoirPressure(firstCar);
             Pressure maxBrakeCylinderPressure = GetBrakeCylinderPressure(firstCar);
             float maxBrakeFactor = firstCar.brakeSystem.brakingFactor;
 
-            var brakeModes = new SortedSet<char>();
-
-            if (!CarTypes.IsAnyLocomotiveOrTender(firstCar.carLivery))
-                brakeModes.Add(GetTripleValveState(firstCar));
-
             int i = 0;
-            foreach (var (car, index) in cars.Select((x, i) => (x, i)))
+            for (var index = 0; index < cars.Count; index++)
             {
+                var car = cars[index];
                 float carStress = car.GetComponent<TrainStress>()?.derailBuildUp ?? 0f;
                 float? couplerStress = GetCouplerStress(cars, index);
-                Job? job = SingletonBehaviour<JobsManager>.Instance.GetJobOfCar(car.logicCar);
+                Job? job = SingletonBehaviour<JobsManager>.Instance?.GetJobOfCar(car.logicCar);
                 Track? nextDestination = GetNextDestinationTrack(job, car.logicCar);
                 BrakeSystem brakeSystem = car.brakeSystem;
                 Pressure pipePressure = new Pressure(DrivingMath.GaugePressure(brakeSystem.brakePipePressure), QuantitiesNet.Units.Bar);
@@ -191,8 +152,7 @@ namespace DvMod.HeadsUpDisplay
                             minBrakePipePressure,
                             minBrakeReservoirPressure,
                             maxBrakeCylinderPressure,
-                            maxBrakeFactor,
-                            brakeModes);
+                            maxBrakeFactor);
                     }
 
                     // start new group
@@ -206,10 +166,6 @@ namespace DvMod.HeadsUpDisplay
                     minBrakeReservoirPressure = auxReservoirPressure;
                     maxBrakeCylinderPressure = brakeCylinderPressure;
                     maxBrakeFactor = brakeSystem.brakingFactor;
-                    brakeModes.Clear();
-
-                    if (!CarTypes.IsAnyLocomotiveOrTender(car.carLivery))
-                        brakeModes.Add(GetTripleValveState(car));
                 }
                 else
                 {
@@ -219,16 +175,13 @@ namespace DvMod.HeadsUpDisplay
                     if (couplerStress != null && (maxCouplerStress == null || couplerStress > maxCouplerStress))
                         maxCouplerStress = couplerStress;
                     if (pipePressure < minBrakePipePressure)
-                        minBrakeReservoirPressure = auxReservoirPressure;
+                        minBrakePipePressure = pipePressure;
                     if (auxReservoirPressure < minBrakeReservoirPressure)
                         minBrakeReservoirPressure = auxReservoirPressure;
                     if (brakeCylinderPressure > maxBrakeCylinderPressure)
                         maxBrakeCylinderPressure = brakeCylinderPressure;
                     if (brakeSystem.brakingFactor > maxBrakeFactor)
                         maxBrakeFactor = brakeSystem.brakingFactor;
-
-                    if (!CarTypes.IsAnyLocomotiveOrTender(car.carLivery))
-                        brakeModes.Add(GetTripleValveState(car));
                 }
                 i++;
             }
@@ -245,61 +198,140 @@ namespace DvMod.HeadsUpDisplay
                 minBrakePipePressure,
                 minBrakeReservoirPressure,
                 maxBrakeCylinderPressure,
-                maxBrakeFactor,
-                brakeModes);
+                maxBrakeFactor);
         }
 
         private const char EnDash = '\u2013';
-        private static float lastUpdateTime = 0f;
-        private static CarGroup[]? groups;
+        private static float lastUpdateTime;
+        private static Trainset? sourceTrain;
+        private static TrainCar? sourceFirst, sourceLast;
+        private static int sourceCount;
+        private static bool sourceReversed, sourceGrouped;
+        private static CarRow[] currentRows = Array.Empty<CarRow>();
+        private static CarRow[] displayedRows = Array.Empty<CarRow>();
+        private static bool showStress, showCoupler, showJobs, showDestinations, showBrakes;
 
-        public static void DrawCarList(Trainset trainset)
+        /// <summary>A fully sampled row: drawing never dereferences live cars, jobs or tracks.</summary>
+        private sealed class CarRow
         {
-            var trainInfoSettings = Main.settings.trainInfoSettings;
-            IEnumerable<TrainCar> cars = trainset.cars.AsReadOnly();
-            if (cars.Last() == PlayerManager.LastLoco || (!cars.First().IsLoco && cars.Last().IsLoco))
-                cars = cars.Reverse();
+            public string Range = "", Id = "", Stress = "", Coupler = "", Job = "", Destination = "";
+            public string Pipe = "", Reservoir = "", Cylinder = "", BrakeForce = "";
+            public Color IdColor, StressColor, CouplerColor, JobColor, DestinationColor;
+        }
 
-            if (groups == null || UnityEngine.Time.time - lastUpdateTime >= Main.settings.trainInfoSettings.updatePeriod)
+        /// <summary>Called by the mod's Update callback, outside IMGUI and at the saved cadence.</summary>
+        public static void Update(TrainCar? selectedCar)
+        {
+            var settings = Main.settings.trainInfoSettings;
+            var train = selectedCar?.trainset;
+            if (!Main.settings.layoutSettings.showHud || !settings.enabled || !settings.showCarList
+                || train == null || train.cars.Count == 0)
             {
-                groups = GetCarGroups(cars, !trainInfoSettings.groupCarsByJob).ToArray();
-                lastUpdateTime = UnityEngine.Time.time;
+                Reset();
+                return;
             }
+            var first = train.cars[0];
+            var last = train.cars[train.cars.Count - 1];
+            var reversed = last == PlayerManager.LastLoco || (!first.IsLoco && last.IsLoco);
+            var now = UnityEngine.Time.unscaledTime;
+            if (ReferenceEquals(sourceTrain, train) && sourceFirst == first && sourceLast == last
+                && sourceCount == train.cars.Count && sourceReversed == reversed
+                && sourceGrouped == settings.groupCarsByJob && now >= lastUpdateTime
+                && now - lastUpdateTime < settings.updatePeriod) return;
+            var cars = train.cars.ToArray();
+            if (reversed) Array.Reverse(cars);
+            var pipe = MakePressureFormatter("Brake pipe");
+            var reservoir = MakePressureFormatter("Aux reservoir");
+            var cylinder = MakePressureFormatter("Brake cylinder");
+            currentRows = GetCarGroups(cars, !settings.groupCarsByJob)
+                .Select(group => CaptureRow(group, pipe, reservoir, cylinder)).ToArray();
+            sourceTrain = train; sourceFirst = first; sourceLast = last;
+            sourceCount = cars.Length; sourceReversed = reversed; sourceGrouped = settings.groupCarsByJob;
+            lastUpdateTime = now;
+        }
 
-            GUILayout.BeginHorizontal();
+        public static void Reset()
+        {
+            sourceTrain = null; sourceFirst = sourceLast = null; sourceCount = 0;
+            currentRows = Array.Empty<CarRow>();
+        }
+
+        /// <summary>Freeze the row array and columns together for Layout through Repaint.</summary>
+        public static void PrepareLayout(Settings.TrainInfoSettings settings)
+        {
+            displayedRows = currentRows;
+            showStress = settings.showCarStress;
+            showCoupler = showStress && Registry.GetProvider("Front coupler") != null;
+            showJobs = settings.showCarJobs;
+            showDestinations = settings.showCarDestinations;
+            showBrakes = settings.showCarBrakeStatus;
+        }
+
+        private static CarRow CaptureRow(CarGroup group, Func<Pressure, string> pipe,
+            Func<Pressure, string> reservoir, Func<Pressure, string> cylinder)
+        {
+            var stress = group.maxStress / Globals.G.GameParams.DerailBuildUpThreshold * 100;
+            var coupler = group.maxCouplerStress / 1e4f;
+            var carsAtDestination = group.cars.Count(car => car.logicCar.CurrentTrack == group.nextDestination);
+            return new CarRow
+            {
+                Range = group.startIndex + 1 == group.endIndex ? group.endIndex.ToString() : $"{group.startIndex + 1}{EnDash}{group.endIndex}",
+                Id = group.cars[0].ID, IdColor = GetCarColor(group.cars[0]),
+                Stress = stress.ToString("F0"), StressColor = StressColor(stress),
+                Coupler = coupler?.ToString("F0") ?? " ", CouplerColor = coupler.HasValue ? StressColor(coupler.Value) : Color.white,
+                Job = group.job?.ID ?? " ", JobColor = JobColor(group.job),
+                Destination = group.nextDestination?.ID?.FullDisplayID ?? " ",
+                DestinationColor = carsAtDestination == group.cars.Count ? Color.green : carsAtDestination > 0 ? Color.yellow : Color.white,
+                Pipe = pipe(group.minBrakePipePressure), Reservoir = reservoir(group.minBrakeReservoirPressure),
+                Cylinder = cylinder(group.maxBrakeCylinderPressure), BrakeForce = group.maxBrakeFactor.ToString("P0")
+            };
+        }
+
+        private static Color StressColor(float percent) => Color.HSVToRGB(Mathf.Lerp(1f / 3f, 0, (percent - 30f) / 40f), 1f, 1f);
+
+        public static void DrawCarList()
+        {
+            if (displayedRows.Length == 0) return;
+            var savedColor = GUI.contentColor;
+            try
+            {
+                GUILayout.BeginHorizontal();
+                GUILayout.BeginVertical();
+                GUILayout.Label(" ", Styles.noWrap);
+                foreach (var row in displayedRows) GUILayout.Label(row.Range, Styles.noWrap);
+                GUILayout.EndVertical();
+                DrawColumn("ID", row => row.Id, row => row.IdColor, false);
+                if (showStress) DrawColumn("Derail", row => row.Stress, row => row.StressColor, rightAlign: true);
+                if (showCoupler) DrawColumn("Coupler", row => row.Coupler, row => row.CouplerColor, rightAlign: true);
+                if (showJobs) DrawColumn("Job", row => row.Job, row => row.JobColor);
+                if (showDestinations) DrawColumn("Destination", row => row.Destination, row => row.DestinationColor);
+                if (showBrakes)
+                {
+                    DrawColumn("Pipe", row => row.Pipe);
+                    DrawColumn("Res", row => row.Reservoir);
+                    DrawColumn("Cyl", row => row.Cylinder);
+                    DrawColumn("Force", row => row.BrakeForce, rightAlign: true);
+                }
+                GUILayout.EndHorizontal();
+            }
+            finally { GUI.contentColor = savedColor; }
+        }
+
+        private static void DrawColumn(string heading, Func<CarRow, string> value,
+            Func<CarRow, Color>? color = null, bool space = true, bool rightAlign = false)
+        {
+            if (space) GUILayout.Space(Overlay.ColumnSpacing);
+            var style = rightAlign ? Styles.rightAlign : Styles.noWrap;
             GUILayout.BeginVertical();
-            GUILayout.Label(" ", Styles.noWrap);
-            foreach (CarGroup group in groups)
+            GUILayout.Label(heading, Styles.noWrap);
+            var saved = GUI.contentColor;
+            foreach (var row in displayedRows)
             {
-                if (group.startIndex + 1 == group.endIndex)
-                    GUILayout.Label(group.endIndex.ToString(), Styles.noWrap);
-                else
-                    GUILayout.Label($"{group.startIndex + 1}{EnDash}{group.endIndex}", Styles.noWrap);
+                GUI.contentColor = color?.Invoke(row) ?? saved;
+                GUILayout.Label(value(row), style);
             }
+            GUI.contentColor = saved;
             GUILayout.EndVertical();
-
-            GUILayout.BeginVertical();
-            GUILayout.Label("ID", Styles.noWrap);
-            foreach (CarGroup group in groups)
-            {
-                GUI.contentColor = GetCarColor(group.cars[0]);
-                GUILayout.Label(group.cars[0].ID, Styles.noWrap);
-            }
-            GUI.contentColor = Color.white;
-            GUILayout.EndVertical();
-
-            if (trainInfoSettings.showCarStress)
-                DrawCarStress(groups);
-            if (trainInfoSettings.showCarStress && Registry.GetProvider("Front coupler") != null)
-                DrawCouplerStress(groups);
-            if (trainInfoSettings.showCarJobs)
-                DrawCarJobs(groups);
-            if (trainInfoSettings.showCarDestinations)
-                DrawCarDestinations(groups);
-            if (trainInfoSettings.showCarBrakeStatus)
-                DrawCarBrakeStatus(groups);
-
-            GUILayout.EndHorizontal();
         }
 
         private const float HueOrange = 30f / 360f;
@@ -312,56 +344,15 @@ namespace DvMod.HeadsUpDisplay
 
             var isMultipleUnitCapable = car.TryGetComponent<MultipleUnitModule>(out var muModule);
             var frontMUDisconnected = isMultipleUnitCapable
-                && car.frontCoupler.coupledTo?.train?.carType == car.carType
+                && car.frontCoupler?.coupledTo?.train?.carType == car.carType
                 && !muModule.FrontCable.IsConnected;
             var rearMUDisconnected = isMultipleUnitCapable
-                && car.rearCoupler.coupledTo?.train?.carType == car.carType
+                && car.rearCoupler?.coupledTo?.train?.carType == car.carType
                 && !muModule.RearCable.IsConnected;
             var hasDisconnectedMUCable = frontMUDisconnected || rearMUDisconnected;
-            var isRunning = car.SimController.controlsOverrider?.EngineOnReader?.IsOn ?? true;
+            var isRunning = car.SimController?.controlsOverrider?.EngineOnReader?.IsOn ?? true;
 
             return Color.HSVToRGB(HueOrange, hasDisconnectedMUCable ? 1 : 0, isRunning ? 1 : 0.5f);
-        }
-
-        private static void DrawCarStress(IEnumerable<CarGroup> groups)
-        {
-            var derailThreshold = Globals.G.GameParams.DerailBuildUpThreshold;
-
-            GUILayout.Space(Overlay.ColumnSpacing);
-            GUILayout.BeginVertical();
-            GUILayout.Label("Derail", Styles.noWrap);
-            foreach (CarGroup group in groups)
-            {
-                var buildup = group.maxStress;
-                var buildupPct = buildup / derailThreshold * 100;
-                GUI.contentColor = Color.HSVToRGB(Mathf.Lerp(1f / 3f, 0, (buildupPct - 30f) / 40f), 1f, 1f);
-                GUILayout.Label(buildupPct.ToString("F0"), Styles.rightAlign);
-            }
-            GUI.contentColor = Color.white;
-            GUILayout.EndVertical();
-        }
-
-        private static void DrawCouplerStress(IEnumerable<CarGroup> groups)
-        {
-            GUILayout.Space(Overlay.ColumnSpacing);
-            GUILayout.BeginVertical();
-            GUILayout.Label("Coupler", Styles.noWrap);
-            foreach (CarGroup group in groups)
-            {
-                var stress = group.maxCouplerStress;
-                if (stress == null)
-                {
-                    GUILayout.Label(" ", Styles.rightAlign);
-                }
-                else
-                {
-                    float stressPct = (float)stress / 1e4f;
-                    GUI.contentColor = Color.HSVToRGB(Mathf.Lerp(1f / 3f, 0, (stressPct - 30f) / 40f), 1f, 1f);
-                    GUILayout.Label(stressPct.ToString("F0"), Styles.rightAlign);
-                }
-            }
-            GUI.contentColor = Color.white;
-            GUILayout.EndVertical();
         }
 
         private static Color JobColor(Job? job)
@@ -375,40 +366,6 @@ namespace DvMod.HeadsUpDisplay
                 JobState.Completed => Color.green,
                 _ => Color.red,
             };
-        }
-
-        private static void DrawCarJobs(IEnumerable<CarGroup> groups)
-        {
-            GUILayout.Space(Overlay.ColumnSpacing);
-            GUILayout.BeginVertical();
-            GUILayout.Label("Job", Styles.noWrap);
-            foreach (CarGroup group in groups)
-            {
-                GUI.contentColor = JobColor(group.job);
-                GUILayout.Label(group.job?.ID ?? " ", Styles.noWrap);
-            }
-            GUI.contentColor = Color.white;
-            GUILayout.EndVertical();
-        }
-
-        private static void DrawCarDestinations(IEnumerable<CarGroup> groups)
-        {
-            GUILayout.Space(Overlay.ColumnSpacing);
-            GUILayout.BeginVertical();
-            GUILayout.Label("Destination", Styles.noWrap);
-            foreach (var group in groups)
-            {
-                var destination = group.nextDestination;
-                var carsOnTrack = group.cars.Count(c => c.logicCar.CurrentTrack == destination);
-                GUI.contentColor = carsOnTrack == group.cars.Count ? Color.green
-                    : carsOnTrack > 0 ? Color.yellow
-                    : Color.white;
-                GUILayout.Label(
-                    group.nextDestination?.ID?.FullDisplayID ?? " ",
-                    Styles.noWrap);
-            }
-            GUI.contentColor = Color.white;
-            GUILayout.EndVertical();
         }
 
         private static Track? GetNextDestinationTrack(Task task, Car car)
@@ -432,21 +389,11 @@ namespace DvMod.HeadsUpDisplay
                 var providerSettings = Main.settings.drivingInfoSettings.GetProviderSettings(quantityProvider);
                 if (!providerSettings.TryGetUnit(quantityProvider.Dimension, out var unit))
                     return pressure => pressure.In(QuantitiesNet.Units.Bar).ToString("F1");
-                return pressure => pressure.In(unit).ToString($"F{providerSettings.precision}");
+                var format = $"F{providerSettings.precision}";
+                return pressure => pressure.In(unit).ToString(format);
             }
             return pressure => $"{pressure.Scalar:F2}";
         }
 
-        private static Func<Pressure, string> BrakePipeFormatter => MakePressureFormatter("Brake pipe");
-        private static Func<Pressure, string> AuxReservoirFormatter => MakePressureFormatter("Aux reservoir");
-        private static Func<Pressure, string> BrakeCylinderFormatter => MakePressureFormatter("Brake cylinder");
-
-        private static void DrawCarBrakeStatus(IEnumerable<CarGroup> groups)
-        {
-            Overlay.DrawColumn(groups, "Pipe", g => BrakePipeFormatter(g.minBrakePipePressure));
-            Overlay.DrawColumn(groups, "Res", g => AuxReservoirFormatter(g.minBrakeReservoirPressure));
-            Overlay.DrawColumn(groups, "Cyl", g => BrakeCylinderFormatter(g.maxBrakeCylinderPressure));
-            Overlay.DrawColumn(groups, "Force", g => g.maxBrakeFactor.ToString("P0"), Styles.rightAlign);
-        }
     }
 }

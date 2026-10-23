@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+    <LangVersion>8.0</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Providers/OptionalSignalTelemetry.cs" />
+    <Compile Include="../TrackEvents/SignalTrackEvent.cs" />
+    <Compile Include="../Route/RouteWalker.cs" />
+    <Compile Include="OptionalSignalsStubs.cs" />
+    <Compile Include="OptionalSignalsProgram.cs" />
+  </ItemGroup>
+</Project>

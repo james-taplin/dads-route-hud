@@ -29,6 +29,13 @@ The collector reads native geometry and sign metadata without adding sign collid
 
 ## Candidate status
 
+Candidate **0.5.0** is a separate refactor branch, with capture/optional lifecycle, UI sampling,
+sign/settings lookup and failure-path corrections. The installed **0.4.2** remains available for
+James's current test. See [the handover](docs/HANDOVER.md) for independent review, exact checks and
+runtime acceptance still required. No new runtime dependencies were added.
+Contributors can run `./Validate.ps1 -GamePath '<game path>'` for the complete local checks;
+this builds/packages/tests without changing the real installation.
+
 Candidate **0.4.2** restores the earlier compact distance + description list while retaining Route
 HUD's graph, independent windows, grouped metrics and full event catalogue. It corrects reuse of a
 previous capture's position after a moving refresh, which could trigger another rebuild and remove

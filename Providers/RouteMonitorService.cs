@@ -95,194 +95,196 @@ namespace DvMod.HeadsUpDisplay
                     if (IsActive) Reset();
                     return;
                 }
-                var requested = Main.settings.trackInfoSettings.maxEventSpan;
-                // A different vehicle, a reversal or a new horizon makes the old capture wrong.
-                // Regenerated native geometry does not: the topology is the same, so that only
-                // asks for a fresh capture and must not discard the one on screen.
-                var vehicleChange = car != currentCar || vehicleForward != capturedVehicleForward
-                    || (retained != null && requested != retained.RequestedDistance)
-                    || (walk != null && requested != walk.RequestedDistance);
-                if (geometryChanged)
-                {
-                    geometryChanged = false;
-                    refreshPending = true;
-                }
-                if (!vehicleChange && !refreshPending && walk == null && retained == null
-                    && Time.realtimeSinceStartup < nextRefresh) return;
-                // One position fix per frame: the publication below reuses this exact result
-                // instead of scanning every captured interval a second time.
-                var located = false;
-                var position = 0d;
-                var leftRoute = false;
-                if (!vehicleChange && retained != null)
-                {
-                    located = TryOffset(retained.Intervals, track, span, forward, captureOffset, out position);
-                    if (!located || !CheckNextConnections(retained.Intervals, 16)) leftRoute = true;
-                    else captureOffset = position;
-                }
-                if (vehicleChange || (walk == null && retained == null))
-                {
-                    // Only a vehicle change makes the displayed capture meaningless.
-                    rebuildReason = vehicleChange
-                        ? car != currentCar ? "vehicle changed"
-                            : vehicleForward != capturedVehicleForward ? "direction of travel changed"
-                            : "selected look-ahead changed"
-                        : "first capture";
-                    Begin(car!, track, span, forward, vehicleForward, requested, true, vehicleChange);
-                    refreshPending = false;
-                }
-                else if (leftRoute)
-                {
-                    rebuildReason = located ? "route ahead no longer matches the game's connections"
-                        : "vehicle is no longer on the captured route";
-                    Begin(car!, track, span, forward, vehicleForward, requested, true, false);
-                    refreshPending = false;
-                }
-                else if (walk == null && (refreshPending || Time.realtimeSinceStartup >= nextRefresh)
-                    && !OptionalSignalTelemetry.IsReading)
-                {
-                    rebuildReason = refreshPending ? "native geometry regenerated" : "scheduled refresh";
-                    Begin(car!, track, span, forward, vehicleForward, requested, false);
-                    refreshPending = false;
-                }
-
-                frameTimer.Restart();
-                while (walk != null && !walk.IsComplete && frameTimer.Elapsed.TotalMilliseconds < 2)
-                    walk.Step(16);
-                if (walk != null && walk.IsComplete && collection == null)
-                {
-                    collectingEvents.Clear();
-                    collectingProfile.Clear();
-                    collectingProblems.Clear();
-                    initialElevation = null;
-                    collectionIntervals = IncludeStartBoundary(walk.Intervals);
-                    collection = Collect(walk, collectionIntervals).GetEnumerator();
-                }
-                while (collection != null && frameTimer.Elapsed.TotalMilliseconds < 2)
-                {
-                    if (!collection.MoveNext())
-                    {
-                        collection.Dispose();
-                        collection = null;
-                        FinishCapture();
-                        // FinishCapture can replace retained with intervals anchored at a new
-                        // origin. A position measured above belongs to the old capture: reproject
-                        // before publication, or the next frame looks like backwards travel and
-                        // unnecessarily discards this capture and its optional signal sample.
-                        located = false;
-                        break;
-                    }
-                }
-
+                if (!ScheduleCapture(car!, track, span, forward, vehicleForward, out var located, out var position)) return;
+                // Completing a capture changes its origin. Never reuse a position projected
+                // onto the previous capture when publishing the replacement (0.4.2 correction).
+                if (AdvanceCapture()) located = false;
                 if (retained != null)
                 {
                     OptionalSignalTelemetry.Update(car, retained.Intervals, retained.Revision);
                     if (Time.realtimeSinceStartup >= nextPublish)
-                    {
-                        // Position is measured against this capture's exact native intervals.
-                        if (located || TryOffset(retained.Intervals, track, span, forward, captureOffset, out position))
-                        {
-                            var offset = position;
-                            captureOffset = offset;
-                            var incoming = MergeOptional(retained);
-                            var previous = display.Capture;
-                            var oldOffset = 0d;
-                            var hold = signalPublicationPending && OptionalSignalTelemetry.IsReading
-                                && OptionalSignalTelemetry.IsAvailable && previous != null
-                                && ReferenceEquals(displayedSignalSource, OptionalSignalTelemetry.ActiveSignalSource)
-                                && ReferenceEquals(displayedTrafficSource, OptionalSignalTelemetry.ActiveTrafficSource)
-                                && TryOffset(previous.Intervals, track, span, forward, displayOffset, out oldOffset);
-                            if (Main.settings.enableLogging && signalPublicationPending
-                                && OptionalSignalTelemetry.IsReading && !hold && loggedHoldRevision != retained.Revision)
-                            {
-                                loggedHoldRevision = retained.Revision;
-                                Main.mod?.Logger.Log("Signal hold declined for capture " + retained.Revision
-                                    + "; available=" + OptionalSignalTelemetry.IsAvailable
-                                    + "; previous=" + (previous != null)
-                                    + "; signal source matches=" + ReferenceEquals(displayedSignalSource, OptionalSignalTelemetry.ActiveSignalSource)
-                                    + "; traffic source matches=" + ReferenceEquals(displayedTrafficSource, OptionalSignalTelemetry.ActiveTrafficSource)
-                                    + "; position matches=" + (previous != null && TryOffset(previous.Intervals, track, span, forward, displayOffset, out _))
-                                    + "; rebuild=" + rebuildReason);
-                            }
-                            var selected = display.Select(incoming, hold);
-                            if (hold)
-                            {
-                                displayOffset = oldOffset;
-                                selected = new RouteSnapshot<RailTrack>(selected.Revision, selected.RequestedDistance,
-                                    selected.ReachedDistance, selected.Termination, selected.Intervals, selected.Events,
-                                    selected.Profile, true, selected.EventCoverage + "; replacement pending",
-                                    "Refreshing signals; previous same-route sample retained", selected.Diagnostics,
-                                    selected.UpdatedAtUtc, alreadySorted: true);
-                            }
-                            else
-                            {
-                                signalPublicationPending = false;
-                                displayOffset = offset;
-                                displayedSignalSource = OptionalSignalTelemetry.ActiveSignalSource;
-                                displayedTrafficSource = OptionalSignalTelemetry.ActiveTrafficSource;
-                            }
-                            Current = RouteSnapshotView.Shift(selected, displayOffset);
-                            LogPublication(hold);
-                        }
-                        else if (retained.Intervals.Count == 0) Current = MergeOptional(retained);
-                        nextPublish = Time.realtimeSinceStartup + 0.25f;
-                    }
+                        PublishRetained(track, span, forward, located, position);
                 }
                 else if (walk != null && Time.realtimeSinceStartup >= nextPublish)
-                {
-                    // While a replacement is being collected, keep showing the last completed
-                    // capture rather than emptying the list, as long as the vehicle is still on
-                    // it. A partial walk is only shown when there is nothing better to show.
-                    var held = display.Capture;
-                    if (held != null && held.Events.Count > 0
-                        && TryOffset(held.Intervals, track, span, forward, displayOffset, out var heldOffset))
-                    {
-                        displayOffset = heldOffset;
-                        Current = RouteSnapshotView.Shift(Rebuilding(held), displayOffset);
-                        nextPublish = Time.realtimeSinceStartup + 0.25f;
-                        return;
-                    }
-                    var partial = new RouteSnapshot<RailTrack>(revision, walk.RequestedDistance, walk.ReachedDistance,
-                        walk.Termination, IncludeStartBoundary(walk.Intervals), collectingEvents, collectingProfile, true,
-                        collection == null ? "Walking native selected route; event collection pending"
-                            : "Collecting every native sign part and track item; observations partial",
-                        "Optional signals pending route capture", collectingProblems);
-                    if (TryOffset(partial.Intervals, track, span, forward, captureOffset, out var offset))
-                    {
-                        captureOffset = offset;
-                        Current = RouteSnapshotView.Shift(partial, offset);
-                    }
-                    else Current = new RouteSnapshot<RailTrack>(revision, requested, 0, RouteWalkTermination.InProgress,
-                        Array.Empty<RouteInterval<RailTrack>>(), Array.Empty<RouteEvent>(), Array.Empty<RouteProfilePoint>(),
-                        true, "Live position is beyond the intervals collected so far; waiting for capture",
-                        "Optional signals pending route capture");
-                    nextPublish = Time.realtimeSinceStartup + 0.25f;
-                }
+                    PublishCollecting(track, span, forward);
             }
             catch (Exception exception)
             {
-                var message = exception.GetBaseException().Message;
-                if (loggedFailures.Add(message)) Main.mod?.Logger.Warning("Route collection failed: " + message);
-                var requested = Main.settings.trackInfoSettings.maxEventSpan;
-                var intervals = walk?.Intervals ?? retained?.Intervals ?? Array.Empty<RouteInterval<RailTrack>>();
-                Current = new RouteSnapshot<RailTrack>(revision, requested, walk?.ReachedDistance ?? 0,
-                    RouteWalkTermination.CollectionFailed, intervals, collectingEvents, collectingProfile,
-                    false, "Route capture failed; retry pending", OptionalSignalTelemetry.Status, new[] { message });
-                collection?.Dispose();
-                collection = null;
-                walk = null;
-                retained = null;
-                nextRefresh = Time.realtimeSinceStartup + 2;
+                FailCapture(exception);
             }
         }
 
+        private static bool ScheduleCapture(TrainCar car, RailTrack track, double span, bool forward,
+            bool vehicleForward, out bool located, out double position)
+        {
+            var requested = Main.settings.trackInfoSettings.maxEventSpan;
+            var vehicleChange = car != currentCar || vehicleForward != capturedVehicleForward
+                || (retained != null && requested != retained.RequestedDistance)
+                || (walk != null && requested != walk.RequestedDistance);
+            if (geometryChanged)
+            {
+                geometryChanged = false;
+                refreshPending = true;
+            }
+            located = false;
+            position = 0;
+            if (!vehicleChange && !refreshPending && walk == null && retained == null
+                && Time.realtimeSinceStartup < nextRefresh) return false;
+
+            var leftRoute = false;
+            if (!vehicleChange && retained != null)
+            {
+                located = TryOffset(retained.Intervals, track, span, forward, captureOffset, out position);
+                leftRoute = !located || !CheckNextConnections(retained.Intervals, 16);
+                if (!leftRoute) captureOffset = position;
+            }
+            if (vehicleChange || (walk == null && retained == null))
+            {
+                rebuildReason = vehicleChange
+                    ? car != currentCar ? "vehicle changed"
+                        : vehicleForward != capturedVehicleForward ? "direction of travel changed"
+                        : "selected look-ahead changed"
+                    : "first capture";
+                Begin(car, track, span, forward, vehicleForward, requested, true);
+                located = false;
+            }
+            else if (leftRoute)
+            {
+                rebuildReason = located ? "route ahead no longer matches the game's connections"
+                    : "vehicle is no longer on the captured route";
+                // Position alone cannot validate a previous route after a switch changes.
+                Begin(car, track, span, forward, vehicleForward, requested, true);
+                located = false;
+            }
+            else if (walk == null && (refreshPending || Time.realtimeSinceStartup >= nextRefresh)
+                && !OptionalSignalTelemetry.IsReading)
+            {
+                rebuildReason = refreshPending ? "native geometry regenerated" : "scheduled refresh";
+                Begin(car, track, span, forward, vehicleForward, requested, false);
+            }
+            return true;
+        }
+
+        /// <returns>Whether the capture origin may have changed.</returns>
+        private static bool AdvanceCapture()
+        {
+            frameTimer.Restart();
+            while (walk != null && !walk.IsComplete && frameTimer.Elapsed.TotalMilliseconds < 2)
+                walk.Step(16);
+            if (walk != null && walk.IsComplete && collection == null)
+            {
+                collectionIntervals = IncludeStartBoundary(walk.Intervals);
+                collection = Collect(walk, collectionIntervals).GetEnumerator();
+            }
+            while (collection != null && frameTimer.Elapsed.TotalMilliseconds < 2)
+            {
+                if (collection.MoveNext()) continue;
+                collection.Dispose();
+                collection = null;
+                FinishCapture();
+                return true;
+            }
+            return false;
+        }
+
+        private static void PublishRetained(RailTrack track, double span, bool forward, bool located, double position)
+        {
+            var source = retained!;
+            if (located || TryOffset(source.Intervals, track, span, forward, captureOffset, out position))
+            {
+                captureOffset = position;
+                var previous = display.Capture;
+                var oldOffset = 0d;
+                var hold = signalPublicationPending && OptionalSignalTelemetry.IsReading
+                    && OptionalSignalTelemetry.IsAvailable && previous != null
+                    && ReferenceEquals(displayedSignalSource, OptionalSignalTelemetry.ActiveSignalSource)
+                    && ReferenceEquals(displayedTrafficSource, OptionalSignalTelemetry.ActiveTrafficSource)
+                    && TryOffset(previous.Intervals, track, span, forward, displayOffset, out oldOffset);
+                LogDeclinedHold(source.Revision, previous, track, span, forward, hold);
+                RouteSnapshot<RailTrack> selected;
+                if (hold)
+                {
+                    // Do not merge/sort a replacement that cannot be published yet.
+                    selected = previous!;
+                    displayOffset = oldOffset;
+                    selected = selected.WithStatus(true, selected.EventCoverage + "; replacement pending",
+                        "Refreshing signals; previous same-route sample retained");
+                }
+                else
+                {
+                    selected = display.Select(MergeOptional(source), false);
+                    signalPublicationPending = false;
+                    displayOffset = position;
+                    displayedSignalSource = OptionalSignalTelemetry.ActiveSignalSource;
+                    displayedTrafficSource = OptionalSignalTelemetry.ActiveTrafficSource;
+                }
+                Current = RouteSnapshotView.Shift(selected, displayOffset);
+                LogPublication(hold);
+            }
+            else if (source.Intervals.Count == 0) Current = MergeOptional(source);
+            nextPublish = Time.realtimeSinceStartup + 0.25f;
+        }
+
+        private static void LogDeclinedHold(long captureRevision, RouteSnapshot<RailTrack>? previous,
+            RailTrack track, double span, bool forward, bool held)
+        {
+            if (!Main.settings.enableLogging || !signalPublicationPending || !OptionalSignalTelemetry.IsReading
+                || held || loggedHoldRevision == captureRevision) return;
+            loggedHoldRevision = captureRevision;
+            Main.mod?.Logger.Log("Signal hold declined for capture " + captureRevision
+                + "; available=" + OptionalSignalTelemetry.IsAvailable
+                + "; previous=" + (previous != null)
+                + "; signal source matches=" + ReferenceEquals(displayedSignalSource, OptionalSignalTelemetry.ActiveSignalSource)
+                + "; traffic source matches=" + ReferenceEquals(displayedTrafficSource, OptionalSignalTelemetry.ActiveTrafficSource)
+                + "; position matches=" + (previous != null && TryOffset(previous.Intervals, track, span, forward, displayOffset, out _))
+                + "; rebuild=" + rebuildReason);
+        }
+
+        private static void PublishCollecting(RailTrack track, double span, bool forward)
+        {
+            var source = walk!;
+            var partial = new RouteSnapshot<RailTrack>(revision, source.RequestedDistance, source.ReachedDistance,
+                source.Termination, IncludeStartBoundary(source.Intervals), collectingEvents, collectingProfile, true,
+                collection == null ? "Walking native selected route; event collection pending"
+                    : "Collecting every native sign part and track item; observations partial",
+                "Optional signals pending route capture", collectingProblems);
+            if (TryOffset(partial.Intervals, track, span, forward, captureOffset, out var offset))
+            {
+                captureOffset = offset;
+                Current = RouteSnapshotView.Shift(partial, offset);
+            }
+            else Current = new RouteSnapshot<RailTrack>(revision, source.RequestedDistance, 0, RouteWalkTermination.InProgress,
+                Array.Empty<RouteInterval<RailTrack>>(), Array.Empty<RouteEvent>(), Array.Empty<RouteProfilePoint>(),
+                true, "Live position is beyond the intervals collected so far; waiting for capture",
+                "Optional signals pending route capture");
+            nextPublish = Time.realtimeSinceStartup + 0.25f;
+        }
+
+        private static void FailCapture(Exception exception)
+        {
+            var message = exception.GetBaseException().Message;
+            if (loggedFailures.Add(message)) Main.mod?.Logger.Warning("Route collection failed: " + message);
+            var intervals = walk?.Intervals ?? retained?.Intervals ?? Array.Empty<RouteInterval<RailTrack>>();
+            Current = new RouteSnapshot<RailTrack>(revision, Main.settings.trackInfoSettings.maxEventSpan,
+                walk?.ReachedDistance ?? retained?.ReachedDistance ?? 0,
+                RouteWalkTermination.CollectionFailed, intervals, collectingEvents, collectingProfile,
+                false, "Route capture failed; retry pending", OptionalSignalTelemetry.Status, new[] { message });
+            collection?.Dispose();
+            collection = null;
+            walk = null;
+            retained = null;
+            display.Clear();
+            signalPublicationPending = false;
+            OptionalSignalTelemetry.Reset();
+            nextRefresh = Time.realtimeSinceStartup + 2;
+        }
+
         /// <summary>
-        /// Starts a capture. <paramref name="discardPrevious"/> retires the retained capture;
-        /// <paramref name="clearDisplay"/> additionally drops what is on screen, which is only
-        /// right when the previous capture can no longer describe this vehicle's route.
+        /// Starts a capture. Only a soft refresh can retain the previous route and its sources;
+        /// a vehicle, direction, horizon or topology change discards them together.
         /// </summary>
         private static void Begin(TrainCar car, RailTrack track, double span, bool forward, bool vehicleForward,
-            double requested, bool discardPrevious, bool clearDisplay = true)
+            double requested, bool discardPrevious)
         {
             collection?.Dispose();
             collection = null;
@@ -292,18 +294,7 @@ namespace DvMod.HeadsUpDisplay
             initialElevation = null;
             if (discardPrevious)
             {
-                retained = null;
-                signalPublicationPending = false;
-                displayedSignalSource = displayedTrafficSource = null;
-                eventTracks.Clear();
-                captureOffset = 0;
-                OptionalSignalTelemetry.Reset();
-                if (clearDisplay)
-                {
-                    display.Clear();
-                    displayOffset = 0;
-                    Current = RouteSnapshot<RailTrack>.Empty(requested);
-                }
+                DiscardRetained(requested);
             }
             currentCar = car;
             capturedVehicleForward = vehicleForward;
@@ -313,9 +304,22 @@ namespace DvMod.HeadsUpDisplay
                 ? new RouteInterval<RailTrack>(track, forward, span, span, 0, 0) : (RouteInterval<RailTrack>?)null;
             collectionIntervals = Array.Empty<RouteInterval<RailTrack>>();
             geometryChanged = false;
+            refreshPending = false;
             walk = new RouteWalkBuilder<RailTrack>(graph, track, span, forward, requested);
             revision++;
             nextPublish = 0;
+        }
+
+        private static void DiscardRetained(double requested)
+        {
+            retained = null;
+            signalPublicationPending = false;
+            displayedSignalSource = displayedTrafficSource = null;
+            eventTracks.Clear();
+            captureOffset = displayOffset = 0;
+            display.Clear();
+            OptionalSignalTelemetry.Reset();
+            Current = RouteSnapshot<RailTrack>.Empty(requested);
         }
 
         private static IReadOnlyList<RouteInterval<RailTrack>> IncludeStartBoundary(IReadOnlyList<RouteInterval<RailTrack>> intervals)
@@ -435,11 +439,21 @@ namespace DvMod.HeadsUpDisplay
             if (walk == null) return;
             if (!CheckAllConnections(collectionIntervals))
             {
-                // The route changed under the capture. Ask for another one, and leave whatever is
-                // on screen alone: the publication path decides whether it still applies.
+                // The selected path changed under an incremental capture. Neither that result
+                // nor the previous route can be shown as current until the new path is captured.
+                DiscardRetained(walk.RequestedDistance);
                 refreshPending = true;
-                retained = null;
                 walk = null;
+                return;
+            }
+            if (geometryChanged || refreshPending)
+            {
+                // A native regeneration can arrive after a track was sampled in this pass.
+                // Keep a usable previous capture, but never publish mixed geometry as new.
+                geometryChanged = false;
+                refreshPending = true;
+                walk = null;
+                nextRefresh = 0;
                 return;
             }
             var ending = DescribeShortRoute(walk);
@@ -546,17 +560,6 @@ namespace DvMod.HeadsUpDisplay
                 + "; capture " + rebuildCount + "; last rebuild: " + rebuildReason);
         }
 
-        /// <summary>Marks a completed capture that is being shown while its replacement is collected.</summary>
-        private static RouteSnapshot<RailTrack> Rebuilding(RouteSnapshot<RailTrack> source)
-        {
-            const string note = "previous capture retained while refreshing";
-            if (source.EventCoverage.IndexOf(note, StringComparison.OrdinalIgnoreCase) >= 0) return source;
-            return new RouteSnapshot<RailTrack>(source.Revision, source.RequestedDistance, source.ReachedDistance,
-                source.Termination, source.Intervals, source.Events, source.Profile, true,
-                source.EventCoverage.Length == 0 ? note : source.EventCoverage + "; " + note,
-                source.SignalCoverage, source.Diagnostics, source.UpdatedAtUtc, alreadySorted: true);
-        }
-
         private static RouteSnapshot<RailTrack> MergeOptional(RouteSnapshot<RailTrack> source)
         {
             var events = new List<RouteEvent>(source.Events.Count + OptionalSignalTelemetry.UpcomingSignals.Count);
@@ -603,7 +606,7 @@ namespace DvMod.HeadsUpDisplay
         private static bool CheckNextConnections(IReadOnlyList<RouteInterval<RailTrack>> intervals, int budget)
         {
             if (intervals.Count < 2) return true;
-            for (var step = 0; step < budget; step++)
+            for (var step = 0; step < Math.Min(budget, intervals.Count - 1); step++)
             {
                 if (topologyCursor + 1 >= intervals.Count) topologyCursor = 0;
                 var index = topologyCursor++;

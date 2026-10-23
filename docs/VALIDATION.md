@@ -27,17 +27,43 @@ and tests the game.
 
 ## Repeatable automated checks
 
+On a contributor machine with the installed game, `./Validate.ps1 -GamePath '<game path>'` runs the
+complete build, production-boundary suites, metadata audit, package/artifact audit and isolated
+installer fixtures. It records build/validation-receipt.json and does not install into the game.
+It selects the installed SDK explicitly and scopes/restores its CLI environment. Individual commands:
+
 ```powershell
 ./Build.ps1 -GamePath 'C:\Program Files (x86)\Steam\steamapps\common\Derail Valley'
 dotnet run --project tests/DrivingMath.Tests.csproj --configuration Release
 dotnet run --project tests/RouteCore.Tests.csproj --configuration Release
 dotnet run --project tests/RouteService.Tests.csproj --configuration Release
+dotnet run --project tests/NativeGeometry.Tests.csproj --configuration Release
+dotnet run --project tests/NativeSigns.Tests.csproj --configuration Release
+dotnet run --project tests/OptionalSignals.Tests.csproj --configuration Release
+dotnet run --project tests/CarList.Tests.csproj --configuration Release
+dotnet run --project tests/NativeTelemetry.Tests.csproj --configuration Release
 dotnet run --project tools/OptionalContracts/OptionalContracts.csproj --configuration Release -p:NuGetAudit=false -- 'C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\Mods' '.\build\optional-contract-audit.json'
 git diff --check
 ./Package.ps1
+./tests/Install.Tests.ps1
 ```
 
-Expect zero build warnings/errors, 14 driving checks, 250 route/layout/naming checks, 55 capture-service lifecycle checks and 51 metadata matches. The service suite compiles production service code with native/optional boundary test doubles; it does not run Unity. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave parent source, installed HUD/settings and Params.xml unchanged.
+Expect zero build warnings/errors and 582 checks across eight suites: 14 driving, 252 route/layout/naming, 67 capture-service lifecycle, 90 native-geometry, 47 production sign-index, 51 actual optional-adapter, 16 car-list and 45 telemetry/registry. The installer fixtures add 12 assertions and the PE contract audit matches 51/51 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
+
+## 0.5.0 refactor - runtime acceptance pending
+
+Keep installed 0.4.2 until a refactor test installation is requested. Compare all three windows,
+compact list, opacity/padding/font sizes, metric assignments, inspector/paging and saved choices.
+Drive through several optional refreshes, reverse, switch locomotive, change a route ahead and
+reload a scene. Only valid same-route facts may remain during refresh; an actual changed path or
+source must invalidate obsolete data. Test a loaded and late-enabled sign catalogue with parallel
+rails and world shifts. Compare real frame timing; synthetic benchmark results are not game proof.
+
+With a car list shown, check grouped pipe/reservoir minima, rear-coupled stock with a free front
+coupler, train changes/coupling/uncoupling, individual/grouped modes and saved refresh cadence.
+Rows/columns must remain stable within an IMGUI cycle. Confirm settings persist after restart.
+The static settings field contract matches 0.4.2; serializer/input/runtime behavior still needs
+these observations. Terminal/loop-edge revalidation retains its existing scheduled-refresh bound.
 
 ## 0.4.2 compact list and moving refresh - game acceptance pending
 

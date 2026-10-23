@@ -20,6 +20,10 @@ namespace DvMod.HeadsUpDisplay
             private string search = "";
             private int selectedGroup;
             private readonly List<(ProviderSettings settings, int index)> visibleProviderSettings = new List<(ProviderSettings, int)>();
+            // Private runtime index only: the ordered list remains the serialized source of truth.
+            private readonly Dictionary<string, ProviderSettings> providerIndex = new Dictionary<string, ProviderSettings>(StringComparer.Ordinal);
+            private List<ProviderSettings>? indexedProviderSettings;
+            private int indexedProviderCount = -1;
 
             private static readonly string[] ColumnChoices = { "Auto", "1", "2", "3", "4", "5", "6", "7", "8" };
             private static readonly string[] ColumnFilters = { "All columns", "Auto", "1", "2", "3", "4", "5", "6", "7", "8" };
@@ -96,11 +100,12 @@ namespace DvMod.HeadsUpDisplay
 
                 var upTarget = MoveTarget(providerIndex, -1);
                 var downTarget = MoveTarget(providerIndex, 1);
-                GUI.enabled = upTarget >= 0;
+                var enabled = GUI.enabled;
+                GUI.enabled = enabled && upTarget >= 0;
                 var upPressed = GUILayout.Button("^");//, GUILayout.Width(30), GUILayout.ExpandWidth(false));
-                GUI.enabled = downTarget >= 0;
+                GUI.enabled = enabled && downTarget >= 0;
                 var downPressed = GUILayout.Button("v");//, GUILayout.Width(30), GUILayout.ExpandWidth(false));
-                GUI.enabled = true;
+                GUI.enabled = enabled;
 
                 if (upPressed)
                     orderChange = (providerIndex, upTarget);
@@ -198,8 +203,9 @@ namespace DvMod.HeadsUpDisplay
                 if (Event.current.type == EventType.Layout)
                 {
                     visibleProviderSettings.Clear();
-                    foreach (var (settings, index) in providerSettings.Select((x, i) => (x, i)))
+                    for (var index = 0; index < providerSettings.Count; index++)
                     {
+                        var settings = providerSettings[index];
                         var label = settings.providerLabel;
                         if (label.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0 && MatchesGroup(label)
                             && (selectedColumn == 0 || settings.column == selectedColumn - 1))
@@ -216,6 +222,7 @@ namespace DvMod.HeadsUpDisplay
                     var settings = providerSettings[index];
                     providerSettings.RemoveAt(index);
                     providerSettings.Insert(orderChange.Value.targetIndex, settings);
+                    indexedProviderCount = -1;
                 }
             }
 
@@ -319,11 +326,28 @@ namespace DvMod.HeadsUpDisplay
                 GetProviderSettings(provider);
             }
 
+            public bool HasProviderSettings(string label)
+            {
+                EnsureProviderIndex();
+                return providerIndex.ContainsKey(label);
+            }
+
+            private void EnsureProviderIndex()
+            {
+                if (ReferenceEquals(indexedProviderSettings, providerSettings) && indexedProviderCount == providerSettings.Count) return;
+                providerIndex.Clear();
+                foreach (var settings in providerSettings)
+                    // Match List.Find's first occurrence for existing settings with duplicate labels.
+                    if (!providerIndex.ContainsKey(settings.providerLabel)) providerIndex.Add(settings.providerLabel, settings);
+                indexedProviderSettings = providerSettings;
+                indexedProviderCount = providerSettings.Count;
+            }
+
             public ProviderSettings GetProviderSettings(IDataProvider provider)
             {
                 var label = provider.Label;
-                var settings = providerSettings.Find(p => p.providerLabel == label);
-                if (settings == default)
+                EnsureProviderIndex();
+                if (!providerIndex.TryGetValue(label, out var settings))
                 {
                     settings = new ProviderSettings()
                     {
@@ -331,14 +355,17 @@ namespace DvMod.HeadsUpDisplay
                         precision = provider is IQuantityProvider quantity && quantity.Dimension.Equals(Dimensions.Pressure.dimension) ? 1 : 0,
                     };
                     providerSettings.Add(settings);
+                    providerIndex.Add(label, settings);
+                    indexedProviderCount = providerSettings.Count;
                 }
                 return settings;
             }
 
             public IEnumerable<IDataProvider> OrderedProviders()
             {
-                foreach (var label in providerSettings.Select(settings => settings.providerLabel))
+                foreach (var settings in providerSettings)
                 {
+                    var label = settings.providerLabel;
                     if (Registry.providers.TryGetValue(label, out var provider)
                         && !provider.Hidden && IsEnabled(provider))
                         yield return provider;
@@ -355,7 +382,7 @@ namespace DvMod.HeadsUpDisplay
                 ft,
             }
             [Draw("Enable")] public bool enabled = true;
-            // Retained for the unused inherited list renderer, never a route collection cap.
+            // Retained for saved-settings compatibility, never a route collection cap.
             public int maxEventCount = 10;
             [Draw("Look-ahead metres (max 50000)", VisibleOn = "enabled|true")] public double maxEventSpan = 50000;
             [Draw("Distance units", Type = DrawType.ToggleGroup)] public EventDistanceUnits distanceUnits = EventDistanceUnits.m;

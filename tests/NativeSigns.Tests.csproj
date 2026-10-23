@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+    <LangVersion>8.0</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Providers/NativeRouteSignIndex.cs" />
+    <Compile Include="../Route/RouteNaming.cs" />
+    <Compile Include="../Route/RouteModels.cs" />
+    <Compile Include="../Route/RouteWalker.cs" />
+    <Compile Include="../Route/RouteTurn.cs" />
+    <Compile Include="NativeSignsStubs.cs" />
+    <Compile Include="NativeSignsProgram.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+    <LangVersion>8.0</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Providers/NativeTelemetry.cs" />
+    <Compile Include="../Providers/Registry.cs" />
+    <Compile Include="../Providers/DataProvider.cs" />
+    <Compile Include="../Providers/QueryProvider.cs" />
+    <Compile Include="../Providers/DrivingMath.cs" />
+    <Compile Include="NativeTelemetryStubs.cs" />
+    <Compile Include="NativeTelemetryProgram.cs" />
+    <ProjectReference Include="QuantitiesNet.Source.csproj" />
+  </ItemGroup>
+</Project>

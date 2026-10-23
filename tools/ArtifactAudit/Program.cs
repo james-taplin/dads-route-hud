@@ -50,8 +50,10 @@ if (id == "DadsRouteHUD")
 }
 using var archive = ZipFile.OpenRead(zip);
 if (archive.Entries.Count != sources.Count) throw new Exception("Unexpected ZIP count");
+var seenEntries = new HashSet<string>(StringComparer.Ordinal);
 foreach (var entry in archive.Entries)
 {
+    if (!seenEntries.Add(entry.FullName)) throw new Exception("Duplicate ZIP entry: " + entry.FullName);
     var prefix = id + "/";
     if (!entry.FullName.StartsWith(prefix, StringComparison.Ordinal) || !sources.TryGetValue(entry.FullName.Substring(prefix.Length), out var source)) throw new Exception("Non-allowlisted ZIP entry: " + entry.FullName);
     using var input = entry.Open();

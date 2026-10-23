@@ -40,6 +40,7 @@ namespace DvMod.HeadsUpDisplay
         private static readonly MethodInfo? junctionPlan = typeof(SignPlacer).GetMethod("GetJunctionSigns", BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(Junction) }, null);
         private static readonly MethodInfo? shouldInclude = typeof(SignPlacer).GetMethod("ShouldIncludeTrack", BindingFlags.NonPublic | BindingFlags.Static);
         private static readonly Dictionary<int, Source> sources = new Dictionary<int, Source>();
+        private static readonly Dictionary<RailTrack, HashSet<int>> sourceIdsByTrack = new Dictionary<RailTrack, HashSet<int>>();
         private static readonly Dictionary<RailTrack, IReadOnlyList<NativeRouteSign>> cache = new Dictionary<RailTrack, IReadOnlyList<NativeRouteSign>>();
         private static readonly HashSet<RailTrack> watched = new HashSet<RailTrack>();
         private static readonly HashSet<RailTrack> bootstrapped = new HashSet<RailTrack>();
@@ -77,8 +78,10 @@ namespace DvMod.HeadsUpDisplay
             if (bootstrapped.Add(track)) Bootstrap(track);
             if (cache.TryGetValue(track, out var saved)) return saved;
             var entries = new List<NativeRouteSign>();
-            foreach (var source in sources.Values.Where(item => item.Track == track).ToArray())
+            var sourceIds = sourceIdsByTrack.TryGetValue(track, out var ids) ? ids.ToArray() : Array.Empty<int>();
+            foreach (var sourceId in sourceIds)
             {
+                if (!sources.TryGetValue(sourceId, out var source)) continue;
                 if (source.Root == null || ambiguousRoots.Contains(source.Id)) continue;
                 // The offset cancels the native pole's lateral displacement. Keep the
                 // known track association even after a world-origin shift.
@@ -105,6 +108,7 @@ namespace DvMod.HeadsUpDisplay
             foreach (var item in sources.Values.Where(source => source.Root == null || source.Track == null).ToArray())
             {
                 sources.Remove(item.Id);
+                RemoveTrackMembership(item);
                 if (!ReferenceEquals(item.Track, null)) cache.Remove(item.Track);
                 changed = true;
             }
@@ -120,6 +124,7 @@ namespace DvMod.HeadsUpDisplay
         {
             foreach (var track in watched) if (track != null) track.TrackPointsUpdated -= OnTrackPointsUpdated;
             watched.Clear(); bootstrapped.Clear(); cache.Clear(); sources.Clear(); ambiguousRoots.Clear();
+            sourceIdsByTrack.Clear();
             observed.Clear(); observedById.Clear(); problems.Clear(); planCounts.Clear();
             placers = Array.Empty<SignPlacer>();
             observedReady = false;
@@ -156,19 +161,30 @@ namespace DvMod.HeadsUpDisplay
             if (ambiguousRoots.Contains(source.Id)) return;
             if (sources.TryGetValue(source.Id, out var old) && old.Track != source.Track)
             {
-                if (source.Captured) { cache.Remove(old.Track); }
+                if (source.Captured) { cache.Remove(old.Track); RemoveTrackMembership(old); }
                 else if (old.Captured) return;
                 else
                 {
                     sources.Remove(source.Id); ambiguousRoots.Add(source.Id); cache.Remove(old.Track);
+                    RemoveTrackMembership(old);
                     Problem("Ambiguous native-plan association rejected: sign root " + source.Id);
                     SnapshotRevision++;
                     return;
                 }
             }
             sources[source.Id] = source;
+            if (!sourceIdsByTrack.TryGetValue(source.Track, out var ids))
+                sourceIdsByTrack[source.Track] = ids = new HashSet<int>();
+            ids.Add(source.Id);
             cache.Remove(source.Track);
             SnapshotRevision++;
+        }
+
+        private static void RemoveTrackMembership(Source source)
+        {
+            if (ReferenceEquals(source.Track, null) || !sourceIdsByTrack.TryGetValue(source.Track, out var ids)) return;
+            ids.Remove(source.Id);
+            if (ids.Count == 0) sourceIdsByTrack.Remove(source.Track);
         }
 
         private static void Bootstrap(RailTrack track)
@@ -232,7 +248,7 @@ namespace DvMod.HeadsUpDisplay
                     && !ambiguousRoots.Contains(root.Root.GetInstanceID())
                     && Vector3.SqrMagnitude(root.Root.transform.position - expected) <= 0.0625f
                     && Quaternion.Angle(root.Root.transform.rotation, facing) <= 1
-                    && (root.Parts != null ? Signature(root.Parts) == signature : root.Text == text)).ToArray();
+                    && (root.Parts != null ? root.ContentSignature == signature : root.Text == text)).ToArray();
                 if (candidates.Length != 1)
                 {
                     counts.Unmatched++;

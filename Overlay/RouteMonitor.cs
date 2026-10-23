@@ -112,6 +112,9 @@ namespace DvMod.HeadsUpDisplay
         public static void DrawPassive()
         {
             var area = GUILayoutUtility.GetRect(width, Height, GUILayout.Width(width), GUILayout.Height(Height));
+            // The graph is passive, with no controls requiring Layout or input processing.
+            // Reserve its space every pass, then format and paint only on Repaint.
+            if (Event.current.type != EventType.Repaint) return;
             var y = area.y;
             if (showStatus) { Text(new Rect(area.x, y, width, line), status, Styles.noWrap); y += line; }
             if (showOverview)
@@ -334,6 +337,7 @@ namespace DvMod.HeadsUpDisplay
                 ? (distance / 0.3048).ToString("0", CultureInfo.InvariantCulture) + " ft"
                 : (distance / 1000).ToString("0.#", CultureInfo.InvariantCulture) + " km";
         private static string Metres(double distance) => Main.settings.trackInfoSettings.distanceUnits == Settings.TrackInfoSettings.EventDistanceUnits.m && distance < 1000 ? distance.ToString(distance < 1 ? "0.##" : "0", CultureInfo.InvariantCulture) + " m" : Km(distance);
+        public static string EventDistance(double distance) => Metres(distance);
         private static string Friendly(string value) => string.Concat(value.Select((c, i) => i > 0 && char.IsUpper(c) ? " " + c : c.ToString()));
         private static string EventToken(RouteEventKind kind) => kind == RouteEventKind.Signal ? "S" : kind == RouteEventKind.Speed ? "V"
             : kind == RouteEventKind.Junction ? "J" : kind == RouteEventKind.Grade ? "G" : kind == RouteEventKind.Track ? "T" : "?";

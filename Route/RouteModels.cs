@@ -97,5 +97,25 @@ namespace DvMod.HeadsUpDisplay
             new RouteSnapshot<TTrack>(0, requestedDistance, 0, RouteWalkTermination.InProgress,
                 Array.Empty<RouteInterval<TTrack>>(), Array.Empty<RouteEvent>(), Array.Empty<RouteProfilePoint>(),
                 false, "No locomotive selected", "Optional signal data not sampled");
+
+        /// <summary>Changes presentation status while sharing already-frozen capture collections.</summary>
+        public RouteSnapshot<TTrack> WithStatus(bool isCollecting, string eventCoverage, string signalCoverage) =>
+            new RouteSnapshot<TTrack>(this, isCollecting, eventCoverage, signalCoverage);
+
+        private RouteSnapshot(RouteSnapshot<TTrack> source, bool isCollecting, string eventCoverage, string signalCoverage)
+        {
+            Revision = source.Revision;
+            RequestedDistance = source.RequestedDistance;
+            ReachedDistance = source.ReachedDistance;
+            Termination = source.Termination;
+            Intervals = source.Intervals;
+            Events = source.Events;
+            Profile = source.Profile;
+            Diagnostics = source.Diagnostics;
+            IsCollecting = isCollecting;
+            EventCoverage = eventCoverage ?? "";
+            SignalCoverage = signalCoverage ?? "";
+            UpdatedAtUtc = source.UpdatedAtUtc;
+        }
     }
 }

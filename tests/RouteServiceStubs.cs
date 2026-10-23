@@ -94,10 +94,12 @@ namespace DvMod.HeadsUpDisplay
     }
     public static class NativeRouteSignIndex
     {
+        public static Action<RailTrack>? OnEnsureTrack;
         public static long SnapshotRevision => 0;
         public static string Coverage => "Test native observations";
         public static IReadOnlyList<string> Diagnostics => Array.Empty<string>();
-        public static IEnumerable<NativeRouteSign> EnsureTrack(RailTrack track) => Array.Empty<NativeRouteSign>();
+        public static IEnumerable<NativeRouteSign> EnsureTrack(RailTrack track)
+        { OnEnsureTrack?.Invoke(track); return Array.Empty<NativeRouteSign>(); }
     }
     public sealed class SignalTrackEvent
     {
@@ -110,6 +112,7 @@ namespace DvMod.HeadsUpDisplay
     {
         private static long sampledRevision = -1;
         private static int remaining;
+        private static object? sampledSource;
         public static int ResetCount;
         public static int PassFrames = 3;
         public static bool PartialSample = true;
@@ -123,12 +126,12 @@ namespace DvMod.HeadsUpDisplay
         public static IReadOnlyList<SignalTrackEvent> UpcomingSignals { get; private set; } = Array.Empty<SignalTrackEvent>();
         public static string GetTrackReservation(RailTrack track) => "";
         public static void Reset()
-        { ResetCount++; sampledRevision = -1; remaining = 0; UpcomingSignals = Array.Empty<SignalTrackEvent>(); }
+        { ResetCount++; sampledRevision = -1; remaining = 0; sampledSource = null; UpcomingSignals = Array.Empty<SignalTrackEvent>(); }
         public static void Update(TrainCar? car, IReadOnlyList<RouteInterval<RailTrack>> intervals, long revision)
         {
             if (!IsAvailable) { Reset(); return; }
-            if (sampledRevision != revision)
-            { sampledRevision = revision; remaining = PassFrames; UpcomingSignals = Array.Empty<SignalTrackEvent>(); }
+            if (sampledRevision != revision || !ReferenceEquals(sampledSource, ActiveSignalSource))
+            { sampledRevision = revision; sampledSource = ActiveSignalSource; remaining = PassFrames; UpcomingSignals = Array.Empty<SignalTrackEvent>(); }
             if (remaining > 0 && --remaining == 0) UpcomingSignals = new[] { new SignalTrackEvent() };
         }
     }

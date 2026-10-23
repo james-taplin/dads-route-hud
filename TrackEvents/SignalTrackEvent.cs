@@ -1,7 +1,9 @@
 namespace DvMod.HeadsUpDisplay
 {
-    public sealed class SignalTrackEvent : TrackEvent
+    /// <summary>Optional signal observation projected onto one immutable route capture.</summary>
+    public sealed class SignalTrackEvent
     {
+        public readonly double span;
         public readonly string Name;
         public readonly string ColorHex;
         public readonly string Aspect;
@@ -10,8 +12,9 @@ namespace DvMod.HeadsUpDisplay
         public readonly string Freshness;
         public readonly bool FacingTravel;
 
-        public SignalTrackEvent(double distance, string name, string colorHex, string aspect, string reservation, string sourceId = "", string freshness = "", bool facingTravel = true) : base(distance)
+        public SignalTrackEvent(double distance, string name, string colorHex, string aspect, string reservation, string sourceId = "", string freshness = "", bool facingTravel = true)
         {
+            span = distance;
             Name = name;
             ColorHex = colorHex;
             Aspect = aspect;
@@ -21,8 +24,5 @@ namespace DvMod.HeadsUpDisplay
             FacingTravel = facingTravel;
         }
 
-        public override bool Direction => FacingTravel;
-        public override TrackEvent WithSpan(double distance, bool direction)
-            => new SignalTrackEvent(distance, Name, ColorHex, Aspect, Reservation, SourceId, Freshness, direction);
     }
 }

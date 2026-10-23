@@ -64,10 +64,58 @@ internal static class RouteServiceProgram
         }
         // A source replacement during a read must not borrow the old source's facts.
         OptionalSignalTelemetry.ActiveSignalSource = new object();
-        OptionalSignalTelemetry.Reset();
         Frame(car, 23, 46);
         Check(!RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Replacement source cannot inherit the old source's signals");
         RouteMonitorService.Reset();
+        CheckTopologyInvalidation();
         Console.WriteLine(checks + " route-service lifecycle checks passed (native/optional test doubles; not game acceptance).");
+    }
+
+    private static void CheckTopologyInvalidation()
+    {
+        var oldBranch = new RailTrack { name = "Old branch" };
+        var newBranch = new RailTrack { name = "New branch" };
+        var start = new RailTrack { name = "Approach", Length = 200, Next = oldBranch };
+        var car = new TrainCar();
+        foreach (var bogie in car.Bogies) bogie.track = start;
+        for (var i = 0; i < 4; i++) Frame(car, 30 + i * 0.3f, 10);
+        Check(RouteMonitorService.Current.Events.Any(e => e.Label == "Old branch"), "Initial native selected branch is captured");
+        var resets = OptionalSignalTelemetry.ResetCount;
+        start.Next = newBranch;
+        Frame(car, 31.3f, 10);
+        Check(!RouteMonitorService.Current.Events.Any(e => e.Label == "Old branch"), "Changed topology retires the old route even while its anchor still matches");
+        Check(!RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Changed topology cannot borrow old signal facts");
+        Check(OptionalSignalTelemetry.ResetCount > resets, "A genuine path change resets optional observations");
+        for (var i = 0; i < 4; i++) Frame(car, 31.6f + i * 0.3f, 10);
+        Check(RouteMonitorService.Current.Events.Any(e => e.Label == "New branch"), "Replacement route follows the newly selected native branch");
+
+        // Change the native edge after the incremental walk has already read it, from
+        // inside the native sign boundary. A completed stale capture must be rejected.
+        NativeRouteSignIndex.OnEnsureTrack = track =>
+        {
+            if (track != start) return;
+            start.Next = oldBranch;
+            NativeRouteSignIndex.OnEnsureTrack = null;
+        };
+        resets = OptionalSignalTelemetry.ResetCount;
+        Frame(car, 34, 10);
+        Check(!RouteMonitorService.Current.Events.Any(e => e.Label == "New branch"), "Topology change during collection rejects the completed obsolete capture");
+        Check(!RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Rejected capture cannot keep previous route signals visible");
+        Check(OptionalSignalTelemetry.ResetCount > resets, "Topology change during collection resets optional observations");
+        for (var i = 0; i < 5; i++) Frame(car, 34.3f + i * 0.3f, 10);
+        Check(RouteMonitorService.Current.Events.Any(e => e.Label == "Old branch"), "Rejected capture retries the actual new path");
+
+        var previousRevision = RouteMonitorService.Current.Revision;
+        NativeRouteSignIndex.OnEnsureTrack = track =>
+        {
+            NativeRouteSignIndex.OnEnsureTrack = null;
+            track.Regenerate();
+        };
+        Frame(car, 37, 10);
+        Check(RouteMonitorService.Current.Revision == previousRevision, "Geometry regenerated during collection cannot publish a mixed new capture");
+        Check(RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Soft geometry refresh retains a usable previous same-route sample");
+        for (var i = 0; i < 5; i++) Frame(car, 37.3f + i * 0.3f, 10);
+        Check(RouteMonitorService.Current.Revision > previousRevision, "Geometry invalidation retries and publishes a fresh capture");
+        RouteMonitorService.Reset();
     }
 }

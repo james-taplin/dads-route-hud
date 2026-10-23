@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+    <LangVersion>8.0</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Providers/NativeRouteGeometry.cs" />
+    <Compile Include="../Route/RouteWalker.cs" />
+    <Compile Include="NativeGeometryStubs.cs" />
+    <Compile Include="NativeGeometryProgram.cs" />
+  </ItemGroup>
+</Project>

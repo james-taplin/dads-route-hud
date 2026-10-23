@@ -17,10 +17,11 @@ namespace DvMod.HeadsUpDisplay
                 throw new ArgumentOutOfRangeException(nameof(offset));
             if (offset == 0) return snapshot;
 
-            var events = new List<RouteEvent>();
-            foreach (var item in snapshot.Events)
+            var firstEvent = FirstEventAtOrAfter(snapshot.Events, offset);
+            var events = new List<RouteEvent>(snapshot.Events.Count - firstEvent);
+            for (var index = firstEvent; index < snapshot.Events.Count; index++)
             {
-                if (item.Distance < offset) continue;
+                var item = snapshot.Events[index];
                 events.Add(new RouteEvent(item.Id, item.Distance - offset, item.Kind, item.Label,
                     item.Aspect, item.ColorHex, item.Fact, item.Freshness, item.AppliesToTravel, item.Code, item.Marker));
             }
@@ -62,6 +63,19 @@ namespace DvMod.HeadsUpDisplay
                 Math.Max(0, snapshot.ReachedDistance - offset), snapshot.Termination, intervals,
                 events, profile, snapshot.IsCollecting || tailPending, eventCoverage,
                 snapshot.SignalCoverage, snapshot.Diagnostics, snapshot.UpdatedAtUtc, alreadySorted: true);
+        }
+
+        private static int FirstEventAtOrAfter(IReadOnlyList<RouteEvent> events, double distance)
+        {
+            var low = 0;
+            var high = events.Count;
+            while (low < high)
+            {
+                var middle = low + (high - low) / 2;
+                if (events[middle].Distance < distance) low = middle + 1;
+                else high = middle;
+            }
+            return low;
         }
     }
 }
