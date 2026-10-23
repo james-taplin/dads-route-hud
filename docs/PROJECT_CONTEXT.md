@@ -1,6 +1,6 @@
 # Project context
 
-Dad's Route HUD 0.3.1 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
+Dad's Route HUD 0.4.2 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
 
 The public source branch starts at original MIT revision 9acf926a2d7c8512ddb85cbf637b3e4a9bfa6f6f and imports the current fork source in one commit. The local development lineage includes Koteq b09fe942ab5118e6aa348a153f686a537a483d0d and Dad's Driving HUD. Koteq's compatibility contributions are retained and credited, but its old committed game DLLs are excluded by not importing that commit's history. QuantitiesNet is pinned at 2b6522cb70df8108af0d96dec6ebdc6c35a673aa. See LICENSING.md and CREDITS.md.
 
@@ -9,6 +9,13 @@ The net48 assembly uses UMM lifecycle callbacks and runtime IMGUI. NativeTelemet
 Overlay and HudWindow provide the compact/strip modes and independent saved windows. WindowGeometry handles bounded positioning/resizing. RouteMonitor renders profile, range overview and atlas; the complete inspector retains source details. Display filters do not change collection. No Mod Toolbar registration or cursor-unlock/extra driving binding is present.
 
 Actual source coverage, optional-mod combinations, input/visual behavior and performance still require in-game acceptance. Native iteration budgets cannot pre-empt individual native/reflection calls. Distant signal update age is uncertain; multiplayer ownership remains unimplemented.
+
+In 0.4.2 the driving list returns to the pre-Route-HUD distance + compact description format, while
+collection/inspector/graph/window features remain. Publication reprojects the live position when a
+completed capture replaces retained, so offsets from different capture origins cannot trigger a
+false route invalidation. Existing snapshot retention provides refresh stability. Service lifecycle
+regressions compile production service code with native boundary test doubles; game acceptance is
+still required. Install.ps1 preserves settings/flags and clears backed-up UMM shadow caches.
 
 
 ## Track-ahead clarity update

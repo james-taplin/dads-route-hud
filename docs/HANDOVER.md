@@ -1,5 +1,10 @@
 # Development status
 
+23 October 2026: James requested keeping the other Route HUD changes while restoring the compact
+Dad's Driving HUD list and addressing the alternating datasets. Candidate 0.4.2 implements that
+request. The 0.4.1 runtime log now exists; the old instruction to wait for that drive is satisfied.
+See the 0.4.2 section below for confirmed evidence and remaining game acceptance.
+
 Runtime caveat, 22 October 2026: a stale UMM shadow copy held 0.3.2 while later DLLs were
 installed. The on-disk DLL and regenerated shadow copy were verified to match 0.4.1; James then
 requested another cache clear before his next test, and no HUD cache remains. In-game acceptance
@@ -335,3 +340,58 @@ At James's request, Codex recorded the existing returned handover and loaded-can
 The complete working folder and Git database, including ignored packages, cache/settings backups and validation receipts, were independently backed up before this checkpoint. Both changed documents matched that backup by SHA256 before this preservation note. Ignored local evidence remains outside the source checkpoint.
 
 No build, game action, installation, push or release was performed. Runtime and visual acceptance remain pending as documented above. This preservation record does not authorise additional HUD changes or publication.
+
+## Compact list and capture-origin correction - 23 October 2026 (0.4.2)
+
+James authorised this follow-up after bridge swift-wren: preserve the other changes, restore the
+list format used before Route HUD, and address the apparent alternation between datasets.
+
+Confirmed: the 23 October Player.log contains repeated changes around 141 <-> 85 events, with the
+lower count reporting an optional read in progress. The loaded 0.4.1 DLL/cache had already been
+verified. The single optional diagnostic's exact runtime text is still unknown; 0.4.2 logs each
+distinct optional diagnostic through the existing enableLogging setting, without a profiling mode.
+
+The service computed located/position against retained at the start of Update, then could replace
+retained in FinishCapture and reuse that old position in publication. On moving refreshes this
+assigned the old capture's offset to the new capture's origin. A later frame could then fail the
+0.5 m backwards-position check, trigger a false left-route rebuild and reset optional telemetry.
+Publication now reprojects after FinishCapture. A regression compiling the actual service with
+native/optional boundary test doubles fails against HEAD 97ad4a8's service and passes with this
+correction. This establishes a reproducible code defect, not proof it is the only runtime cause.
+Existing complete-snapshot retention and reverser direction behaviour are preserved; no timed delay
+or relaxed invalidation is added. Existing logging now includes capture/rebuild attribution and
+the hold predicate results once per declined capture, should another cause remain in game.
+
+The list follows dads-driving-hud 0.1.2's measured distance + description layout, read-only reference
+only. Short native track codes, coloured signal names, aspects and amber occupancy/reservation text
+are restored. Sign source evidence/raw text/prefab names stay in the full inspector instead of each
+driving row. Switch approach markers and descriptions remain; the newer geometry classification is
+preserved. Current retention, filters, paging, all three windows, metrics, graph, padding, range and
+settings are unchanged. This restores the compact format without restoring legacy collection caps
+or old redundant-event filters. Generic TrackIDs use native IsGeneric and fall back to the actual
+track name; placeholder parts also have a pure naming guard.
+
+Checks: installed-reference build has zero warnings/errors; 250 route-core, 14 driving conversion
+and 55 service lifecycle checks pass; 51/51 metadata contracts match. The lifecycle suite covers
+repeated moving/stationary refreshes with partial diagnostics, source loss/replacement and reversal.
+It uses test doubles at native boundaries and is not a game execution. CI includes that suite.
+Package/artifact audit passed: identity/references and all 14 allowlisted files verified. Nothing pushed,
+merged, tagged or published; the legacy HUD checkouts were read only. James launches/tests DV.
+
+Install.ps1 is the reproducible local upgrade path: requires a closed game and existing HUD,
+checks package hash/allowlist, verifies a full backup, preserves Settings.xml and UMM Params.xml,
+clears only this mod's backed-up shadow caches, then verifies all installed package files/version.
+It does not enable the mod or launch the game. Check the regenerated cache version/hash after the
+next game launch; a copied DLL alone is insufficient evidence of what ran.
+
+### 0.4.2 test installation
+
+Installed with the game closed using Install.ps1. Full verified pre-upgrade mod/settings/cache and
+Params.xml backup plus installation-receipt.json:
+artifacts/backups/compact-list-0.4.2-20261023-165118Z/. All 14 installed package files were checked;
+Settings.xml and UMM Params.xml remain byte-identical. Logging stays enabled. DadsRouteHUD remains
+disabled in UMM because James had turned it off after his drive; enable it in UMM for the next test.
+Only this HUD's backed-up shadow cache was cleared. No game launch or runtime acceptance occurred.
+The final package/installed handover includes this installation note; the receipt records final
+package and installed-file hashes. The runtime cause of the remaining partial diagnostic, and
+whether any additional flicker cause exists, must still be checked from the next game run.

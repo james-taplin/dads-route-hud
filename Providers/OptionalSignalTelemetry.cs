@@ -31,6 +31,7 @@ namespace DvMod.HeadsUpDisplay
         private static IEnumerator<int>? work;
         private static ReadPass? pass;
         private static bool reportedFailure;
+        private static readonly HashSet<string> loggedProblems = new HashSet<string>();
 
         public static IReadOnlyList<SignalTrackEvent> UpcomingSignals => readings;
         public static IReadOnlyList<string> Diagnostics => diagnostics;
@@ -56,6 +57,7 @@ namespace DvMod.HeadsUpDisplay
             snapshotCar = null;
             snapshotRevision = long.MinValue;
             reportedFailure = IsComplete = false;
+            loggedProblems.Clear();
             Status = "Signals unavailable";
         }
 
@@ -139,6 +141,9 @@ namespace DvMod.HeadsUpDisplay
             readings = result.Signals.ToArray();
             reservations = new Dictionary<RailTrack, string>(result.Reservations);
             diagnostics = result.Problems.ToArray();
+            if (Main.settings.enableLogging)
+                foreach (var problem in diagnostics)
+                    if (loggedProblems.Add(problem)) Main.mod?.Logger.Log("Optional signal diagnostic: " + problem);
             IsComplete = finished && result.Problems.Count == 0;
             SampledAt = Time.realtimeSinceStartup;
             Status = managerType == null ? "DVSignals not active; optional facts unavailable"

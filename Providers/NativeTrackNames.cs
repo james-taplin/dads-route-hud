@@ -28,12 +28,12 @@ namespace DvMod.HeadsUpDisplay
                 return;
             }
             var id = track.LogicTrack()?.ID;
-            if (id == null)
+            code = id?.FullID ?? "";
+            if (id == null || id.IsGeneric())
             {
                 name = RouteNaming.TrackName(null, null, null, null, null, track.name);
                 return;
             }
-            code = id.FullID ?? "";
             name = RouteNaming.TrackNameFromParts(id.yardId, id.SignIDSubYardPart, id.SignIDTrackPart,
                 StationName(id.yardId), track.name);
         }

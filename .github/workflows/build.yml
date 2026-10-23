@@ -24,6 +24,8 @@ jobs:
         run: dotnet run --project tests/DrivingMath.Tests.csproj --configuration Release -p:NuGetAudit=false
       - name: Route walk, retention and pagination
         run: dotnet run --project tests/RouteCore.Tests.csproj --configuration Release -p:NuGetAudit=false
+      - name: Capture publication lifecycle with native test doubles
+        run: dotnet run --project tests/RouteService.Tests.csproj --configuration Release -p:NuGetAudit=false
 
 # Game-reference builds require a local game installation: use Build.ps1.
 # Only Package.ps1's explicit allowlist may produce a distributable candidate.

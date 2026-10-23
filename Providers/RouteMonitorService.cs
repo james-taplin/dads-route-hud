@@ -32,6 +32,7 @@ namespace DvMod.HeadsUpDisplay
         private static string rebuildReason = "";
         private static int rebuildCount;
         private static int publishedCount = -1;
+        private static long loggedHoldRevision = long.MinValue;
         private static RouteInterval<RailTrack>? startBoundary;
         private static IReadOnlyList<RouteInterval<RailTrack>> collectionIntervals = Array.Empty<RouteInterval<RailTrack>>();
         private static bool geometryChanged;
@@ -71,6 +72,7 @@ namespace DvMod.HeadsUpDisplay
             rebuildReason = "";
             rebuildCount = 0;
             publishedCount = -1;
+            loggedHoldRevision = long.MinValue;
             initialElevation = null;
             captureOffset = 0;
             geometryChanged = false;
@@ -163,6 +165,11 @@ namespace DvMod.HeadsUpDisplay
                         collection.Dispose();
                         collection = null;
                         FinishCapture();
+                        // FinishCapture can replace retained with intervals anchored at a new
+                        // origin. A position measured above belongs to the old capture: reproject
+                        // before publication, or the next frame looks like backwards travel and
+                        // unnecessarily discards this capture and its optional signal sample.
+                        located = false;
                         break;
                     }
                 }
@@ -185,6 +192,18 @@ namespace DvMod.HeadsUpDisplay
                                 && ReferenceEquals(displayedSignalSource, OptionalSignalTelemetry.ActiveSignalSource)
                                 && ReferenceEquals(displayedTrafficSource, OptionalSignalTelemetry.ActiveTrafficSource)
                                 && TryOffset(previous.Intervals, track, span, forward, displayOffset, out oldOffset);
+                            if (Main.settings.enableLogging && signalPublicationPending
+                                && OptionalSignalTelemetry.IsReading && !hold && loggedHoldRevision != retained.Revision)
+                            {
+                                loggedHoldRevision = retained.Revision;
+                                Main.mod?.Logger.Log("Signal hold declined for capture " + retained.Revision
+                                    + "; available=" + OptionalSignalTelemetry.IsAvailable
+                                    + "; previous=" + (previous != null)
+                                    + "; signal source matches=" + ReferenceEquals(displayedSignalSource, OptionalSignalTelemetry.ActiveSignalSource)
+                                    + "; traffic source matches=" + ReferenceEquals(displayedTrafficSource, OptionalSignalTelemetry.ActiveTrafficSource)
+                                    + "; position matches=" + (previous != null && TryOffset(previous.Intervals, track, span, forward, displayOffset, out _))
+                                    + "; rebuild=" + rebuildReason);
+                            }
                             var selected = display.Select(incoming, hold);
                             if (hold)
                             {
@@ -523,7 +542,8 @@ namespace DvMod.HeadsUpDisplay
             if (previous < 0) return;
             Main.mod?.Logger.Log("Route list " + previous.ToString(CultureInfo.InvariantCulture) + " -> "
                 + count.ToString(CultureInfo.InvariantCulture) + " events"
-                + (held ? "; previous capture held" : "") + "; optional signals: " + OptionalSignalTelemetry.Status);
+                + (held ? "; previous capture held" : "") + "; optional signals: " + OptionalSignalTelemetry.Status
+                + "; capture " + rebuildCount + "; last rebuild: " + rebuildReason);
         }
 
         /// <summary>Marks a completed capture that is being shown while its replacement is collected.</summary>

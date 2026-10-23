@@ -38,11 +38,33 @@ internal static class RouteCoreProgram
         ConfigurableMetricColumns();
         FittedRouteGraph();
         ReadableNames();
+        CompactListText();
         SwitchSides();
         StickyDirection();
         GroupedMetricColumns();
         SyntheticTiming();
         Console.WriteLine(checks + " route-core checks passed.");
+    }
+
+    private static void CompactListText()
+    {
+        var track = new RouteEvent("track", 0, RouteEventKind.Track, "Goods Factory · B yard, track 5, loading",
+            code: "GF-B-5-L", fact: "AI reserved");
+        Check(RouteListText.Description(track) == "GF-B-5-L  <color=#FFBD59>[AI reserved]</color>", "Compact track code and reservation match the old driving list");
+        var sign = new RouteEvent("sign", 100, RouteEventKind.Speed, "60 km/h", fact: "Native recipe; prefab: long-internal-name");
+        Check(RouteListText.Description(sign) == "60 km/h" && sign.Fact.Contains("prefab"), "Sign source diagnostics stay retained without filling the driving row");
+        var signal = new RouteEvent("signal", 200, RouteEventKind.Signal, "<Signal>", "Clear", "00FF00", "Block occupied");
+        Check(RouteListText.Description(signal) == "<color=#00FF00>‹Signal›</color>  Clear  <color=#FFBD59>[Block occupied]</color>", "Signal names have aspect colour and separate reservation facts; native markup is escaped");
+        Check(RouteListText.Description(new RouteEvent("bad", 0, RouteEventKind.Signal, "S", colorHex: "red>bad"))
+            == "<color=#C0C0C0>S</color>", "Invalid native colour cannot become GUI markup");
+        Check(RouteListText.Description(new RouteEvent("switch", 50, RouteEventKind.Junction, "Switch", marker: ">>>"))
+            == ">>>  Switch", "Approach marker survives inside the compact description");
+        Check(RouteListText.Description(new RouteEvent("track", 0, RouteEventKind.Track, "Main line", code: "#Y-#S-917-#T"))
+            == "Main line", "Placeholder track code is not reintroduced by the compact row");
+        Check(RouteNaming.TrackNameFromParts("#Y", "#S", "917#T", "", "track_917") == "track_917",
+            "Native placeholder parts fall back to the actual track name");
+        Check(RouteNaming.TrackNameFromParts("#Y", "#S", "#T", "", null) == "Unnamed track",
+            "Placeholder parts without a fallback stay unnamed");
     }
 
     /// <summary>Readable names come from the game's own identifier parts, never a hardcoded yard list.</summary>

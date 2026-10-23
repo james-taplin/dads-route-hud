@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+    <LangVersion>8.0</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../Route/RouteWalker.cs" />
+    <Compile Include="../Route/RouteModels.cs" />
+    <Compile Include="../Route/RouteSnapshotView.cs" />
+    <Compile Include="../Route/RouteDisplayBuffer.cs" />
+    <Compile Include="../Route/RouteDirection.cs" />
+    <Compile Include="../Route/RouteTurn.cs" />
+    <Compile Include="../Route/RouteNaming.cs" />
+    <Compile Include="../Providers/RouteMonitorService.cs" />
+    <Compile Include="RouteServiceStubs.cs" />
+    <Compile Include="RouteServiceProgram.cs" />
+  </ItemGroup>
+</Project>

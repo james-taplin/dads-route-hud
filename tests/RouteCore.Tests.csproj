@@ -19,6 +19,7 @@
     <Compile Include="../Route/RouteDirection.cs" Link="RouteDirection.cs" />
     <Compile Include="../Route/RouteTurn.cs" Link="RouteTurn.cs" />
     <Compile Include="../Route/RouteNaming.cs" Link="RouteNaming.cs" />
+    <Compile Include="../Route/RouteListText.cs" Link="RouteListText.cs" />
     <Compile Include="RouteCoreProgram.cs" />
   </ItemGroup>
 </Project>

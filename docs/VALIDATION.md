@@ -31,12 +31,29 @@ and tests the game.
 ./Build.ps1 -GamePath 'C:\Program Files (x86)\Steam\steamapps\common\Derail Valley'
 dotnet run --project tests/DrivingMath.Tests.csproj --configuration Release
 dotnet run --project tests/RouteCore.Tests.csproj --configuration Release
+dotnet run --project tests/RouteService.Tests.csproj --configuration Release
 dotnet run --project tools/OptionalContracts/OptionalContracts.csproj --configuration Release -p:NuGetAudit=false -- 'C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\Mods' '.\build\optional-contract-audit.json'
 git diff --check
 ./Package.ps1
 ```
 
-Expect zero build warnings/errors, 14 driving checks, 242 route/layout/naming checks and 51 metadata matches. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave parent source, installed HUD/settings and Params.xml unchanged.
+Expect zero build warnings/errors, 14 driving checks, 250 route/layout/naming checks, 55 capture-service lifecycle checks and 51 metadata matches. The service suite compiles production service code with native/optional boundary test doubles; it does not run Unity. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave parent source, installed HUD/settings and Params.xml unchanged.
+
+## 0.4.2 compact list and moving refresh - game acceptance pending
+
+The old four-column "Readable route list" acceptance below is superseded by James's requested
+compact distance + description layout. Confirm compact track codes, signal-name colours and aspects,
+amber reservation/occupancy facts, retained approach markers, and legibility in the current narrow
+window. Source/prefab evidence belongs only in the inspector. Every observation must remain retained;
+filters/paging and all other window/metric/graph settings must behave as before.
+
+Drive forward for a minute through several scheduled refreshes, then stand for a minute. Signals
+must stay present while replacements are collected; distances must continue tracking position.
+Check that capture/rebuild logs do not show false "vehicle is no longer on the captured route"
+rebuilds after scheduled captures. A genuine switch/vehicle/direction/source change must still
+invalidate obsolete facts immediately. Review any "Signal hold declined" predicate report and
+"Optional signal diagnostic" text if alternation remains. The exact runtime partial diagnostic
+and final visual/stability acceptance remain unverified. James runs the game.
 
 ## Native route acceptance — pending
 

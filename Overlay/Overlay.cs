@@ -329,56 +329,24 @@ namespace DvMod.HeadsUpDisplay
             GUI.enabled = enabled;
             GUILayout.Label($"Page {(eventPage.PageCount == 0 ? 0 : eventPage.PageIndex + 1)} / {eventPage.PageCount}", Styles.noWrap);
             GUILayout.EndHorizontal();
-            // Measured columns, so distances line up and the kind is readable at a glance.
-            var rows = eventPage.Items.Select(RouteMonitor.EventRow).ToArray();
+            // Dad's Driving HUD's measured distance + description layout. Keep the entire
+            // retained catalogue and paging, but leave source diagnostics in the inspector.
+            var rows = eventPage.Items.Select(item => (Distance: RouteMonitor.EventRow(item).Distance,
+                Description: RouteListText.Description(item))).ToArray();
             var distanceWidth = 0f;
-            var kindWidth = 0f;
-            var markerWidth = 0f;
-            var codeWidth = 0f;
             foreach (var row in rows)
-            {
                 distanceWidth = Mathf.Max(distanceWidth, Styles.TextWidth(row.Distance, Styles.rightAlign));
-                kindWidth = Mathf.Max(kindWidth, Styles.TextWidth(row.Kind, Styles.noWrap));
-                markerWidth = Mathf.Max(markerWidth, Styles.TextWidth(row.Marker, Styles.noWrap));
-                codeWidth = Mathf.Max(codeWidth, Styles.TextWidth(row.Code, Styles.noWrap));
-            }
-            // The description keeps whatever is left, and never less than a readable minimum.
-            var columns = 2 + (markerWidth > 0 ? 1 : 0);
-            if (innerWidth - (distanceWidth + kindWidth + markerWidth + codeWidth + (columns + 1) * ColumnSpacing) < 120)
-                codeWidth = 0;
-            if (codeWidth > 0) columns++;
-            var descriptionWidth = Mathf.Max(60,
-                innerWidth - (distanceWidth + kindWidth + markerWidth + codeWidth + columns * ColumnSpacing));
+            distanceWidth = Mathf.Min(distanceWidth, Mathf.Max(1, innerWidth - ColumnSpacing - 1));
+            var descriptionWidth = Mathf.Max(1, innerWidth - distanceWidth - ColumnSpacing);
             for (var index = 0; index < rows.Length; index++)
             {
                 var row = rows[index];
-                var saved = GUI.contentColor;
                 GUILayout.BeginHorizontal(GUILayout.Width(innerWidth));
                 GUILayout.Label(row.Distance, Styles.rightAlign, GUILayout.Width(distanceWidth));
                 GUILayout.Space(ColumnSpacing);
-                GUI.contentColor = new Color(saved.r, saved.g, saved.b, saved.a * 0.65f);
-                GUILayout.Label(row.Kind, Styles.noWrap, GUILayout.Width(kindWidth));
-                GUI.contentColor = saved;
-                GUILayout.Space(ColumnSpacing);
-                if (markerWidth > 0)
-                {
-                    GUILayout.Label(row.Marker, Styles.noWrap, GUILayout.Width(markerWidth));
-                    GUILayout.Space(ColumnSpacing);
-                }
-                if (eventPage.Items[index].Kind == RouteEventKind.Signal)
-                    GUI.contentColor = RouteMonitor.EventColor(eventPage.Items[index]);
-                GUILayout.Label(row.Description, Styles.noWrap, GUILayout.Width(descriptionWidth));
-                GUI.contentColor = saved;
-                if (codeWidth > 0)
-                {
-                    GUILayout.Space(ColumnSpacing);
-                    GUI.contentColor = new Color(saved.r, saved.g, saved.b, saved.a * 0.5f);
-                    GUILayout.Label(row.Code, Styles.noWrap, GUILayout.Width(codeWidth));
-                    GUI.contentColor = saved;
-                }
+                GUILayout.Label(row.Description, Styles.richText, GUILayout.Width(descriptionWidth));
                 GUILayout.EndHorizontal();
             }
-            GUILayout.Label("Display filters and pages do not remove retained events. Full source details are in the UMM inspector.", Styles.noWrap, GUILayout.Width(innerWidth));
         }
         private void CopyTrainSettings()
         {

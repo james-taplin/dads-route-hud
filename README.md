@@ -29,6 +29,15 @@ The collector reads native geometry and sign metadata without adding sign collid
 
 ## Candidate status
 
+Candidate **0.4.2** restores the earlier compact distance + description list while retaining Route
+HUD's graph, independent windows, grouped metrics and full event catalogue. It corrects reuse of a
+previous capture's position after a moving refresh, which could trigger another rebuild and remove
+optional signals. Build, pure and service-boundary regressions pass; in-game stability and appearance
+still require James's test. See [the current handover](docs/HANDOVER.md) and [validation](docs/VALIDATION.md).
+Use `./Install.ps1 -GamePath '<your Derail Valley path>'` only with the game closed, after building,
+testing and packaging. It backs up the current mod, preserves settings/UMM flags and clears this
+mod's shadow cache. The earlier candidate notes below are historical.
+
 Version **0.3.1** is built and packaged for testing. [The handover](docs/HANDOVER.md) records zero-warning game-reference compilation, 152 route/layout checks, 14 conversion checks and 51 metadata-contract checks. These do not establish in-game layout, full-route source coverage or frame timing. Window mouse interaction and visual acceptance remain pending in [VALIDATION.md](docs/VALIDATION.md).
 
 The candidate has its own DadsRouteHUD mod ID, DLL and settings. Building and packaging never install it. For a later test installation, select the desired HUD in UMM and restart. Dad's Driving HUD and previous Rinzler files/settings are not migrated or overwritten.

@@ -94,6 +94,10 @@ namespace DvMod.HeadsUpDisplay
         public static string TrackNameFromParts(string? yardId, string? subYardPart, string? trackPart,
             string? stationName, string? fallback)
         {
+            // DV uses literal #Y/#S/#T placeholders outside real yards. A numeric portion
+            // alongside those placeholders does not establish a station or a yard track.
+            if (Trim(yardId).Contains("#") || Trim(subYardPart).Contains("#") || Trim(trackPart).Contains("#"))
+                return Trim(fallback).Length > 0 ? Trim(fallback) : "Unnamed track";
             SplitTrackPart(trackPart, out var orderNumber, out var trackType);
             return TrackName(yardId, subYardPart, orderNumber, trackType, stationName, fallback);
         }
