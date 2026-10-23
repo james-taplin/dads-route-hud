@@ -48,11 +48,16 @@ git diff --check
 ./tests/Install.Tests.ps1
 ```
 
-Expect zero build warnings/errors and 582 checks across eight suites: 14 driving, 252 route/layout/naming, 67 capture-service lifecycle, 90 native-geometry, 47 production sign-index, 51 actual optional-adapter, 16 car-list and 45 telemetry/registry. The installer fixtures add 12 assertions and the PE contract audit matches 51/51 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
+Expect zero build warnings/errors and 599 checks across eight suites: 14 driving, 252 route/layout/naming, 67 capture-service lifecycle, 90 native-geometry, 47 production sign-index, 51 actual optional-adapter, 33 car-list and 45 telemetry/registry. The installer fixtures add 12 assertions and the PE contract audit matches 51/51 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
 
-## 0.5.0 refactor - runtime acceptance pending
+## 0.5.1 passenger task fix and refactor - runtime acceptance pending
 
-Keep installed 0.4.2 until a refactor test installation is requested. Compare all three windows,
+James requested the refactor test installation and reported a frozen route in 0.5.0. After installing
+0.5.1, verify the loaded DLL/cache version and hash. Repeat the passenger-job drive: car destinations
+must render, route distances and mapped coverage must advance, and the old OnUpdate ArgumentNullException
+must not recur. A deliberately unavailable car-detail source must not stop route updates; any sampling
+warning should be deduplicated and the car rows should recover after the source becomes available.
+Compare all three windows,
 compact list, opacity/padding/font sizes, metric assignments, inspector/paging and saved choices.
 Drive through several optional refreshes, reverse, switch locomotive, change a route ahead and
 reload a scene. Only valid same-route facts may remain during refresh; an actual changed path or

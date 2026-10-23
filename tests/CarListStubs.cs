@@ -64,8 +64,16 @@ namespace DV.Logic.Job
         public TaskState state = TaskState.InProgress;
         public List<Car> cars = new List<Car>();
         public Track? destinationTrack;
-        public List<Task> nestedTasks = new List<Task>();
-        public Task GetTaskData() { TestNative.Reads++; return this; }
+        public List<Task>? nestedTasks = new List<Task>();
+        public Exception? ReadFailure;
+        public int ReadAttempts;
+        public Task GetTaskData()
+        {
+            TestNative.Reads++;
+            ReadAttempts++;
+            if (ReadFailure != null) throw ReadFailure;
+            return this;
+        }
     }
     public sealed class Job { public string ID = "Job"; public JobState State; public List<Task> tasks = new List<Task>(); }
     public sealed class JobsManager { public Job? GetJobOfCar(Car car) { TestNative.Reads++; return car.Job; } }
@@ -92,7 +100,13 @@ public sealed class Engine { public bool IsOn = true; }
 public static class PlayerManager { public static TrainCar? LastLoco; }
 namespace DvMod.HeadsUpDisplay
 {
-    public static class Main { public static Settings settings = new Settings(); }
+    public static class Main { public static Settings settings = new Settings(); public static TestMod? mod = new TestMod(); }
+    public sealed class TestMod { public TestLogger Logger = new TestLogger(); }
+    public sealed class TestLogger
+    {
+        public readonly List<string> Warnings = new List<string>();
+        public void Warning(string message) => Warnings.Add(message);
+    }
     public sealed class Settings
     {
         public TrainInfoSettings trainInfoSettings = new TrainInfoSettings();

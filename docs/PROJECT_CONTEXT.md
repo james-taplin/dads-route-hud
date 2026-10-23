@@ -1,6 +1,6 @@
 # Project context
 
-Dad's Route HUD 0.5.0 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
+Dad's Route HUD 0.5.1 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
 
 The public source branch starts at original MIT revision 9acf926a2d7c8512ddb85cbf637b3e4a9bfa6f6f and imports the current fork source in one commit. The local development lineage includes Koteq b09fe942ab5118e6aa348a153f686a537a483d0d and Dad's Driving HUD. Koteq's compatibility contributions are retained and credited, but its old committed game DLLs are excluded by not importing that commit's history. QuantitiesNet is pinned at 2b6522cb70df8108af0d96dec6ebdc6c35a673aa. See LICENSING.md and CREDITS.md.
 
@@ -17,13 +17,21 @@ false route invalidation. Existing snapshot retention provides refresh stability
 regressions compile production service code with native boundary test doubles; game acceptance is
 still required. Install.ps1 preserves settings/flags and clears backed-up UMM shadow caches.
 
-The 0.5.0 refactor is separate from installed 0.4.2. RouteMonitorService separates scheduling,
+The 0.5.0 refactor was installed for James's test on 23 October. RouteMonitorService separates scheduling,
 collection and publication; hard invalidation clears obsolete facts and same-route replacements
 retain complete snapshots. Optional sources are identified by actual existing native instance.
 CarList samples native state in Update and freezes formatted rows at Layout. Private metric settings
 lookups, per-track sign membership, status sharing and passed-event binary search reduce repeated
 work. The unused inherited track/list path is removed. No runtime dependencies or features were
 added; serialized settings fields and the complete observation model remain compatible.
+
+The 0.5.0 game log confirmed repeated CarList.GetNextDestinationTrack exceptions when a passenger-job
+leaf supplied no nestedTasks. Because CarList now samples in the shared Update before route collection,
+that error froze the route while metrics continued. Version 0.5.1 uses supplied car/destination data
+for such leaves without depending on Passenger Jobs. Car-list row sampling now catches failures,
+clears stale rows at the next Layout, deduplicates warnings and retries at the saved cadence (at least
+0.25 seconds after a failure). Other Update consumers can continue. Native route direction matches the
+game's Bogie transitions; no graph workaround is justified by this fault. Game acceptance remains pending.
 
 
 ## Track-ahead clarity update

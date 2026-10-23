@@ -1,13 +1,13 @@
 # Development status
 
-Latest test installation, 23 October 2026: James requested and received 0.5.0 with his Settings.xml
-preserved byte-for-byte, the Route HUD shadow cache cleared, DadsRouteHUD enabled and DadsDrivingHUD
-disabled in UMM. See the installation follow-up at the end. Earlier pre-installation notes below
-describe the state before this explicit test-install request.
+Latest test installation, 23 October 2026: 0.5.1 is installed with current Settings.xml preserved
+byte-for-byte, this HUD's cache cleared, Route HUD enabled and Driving HUD disabled. It addresses
+a confirmed 0.5.0 freeze: passenger-job task traversal errors escaped CarList.Update and prevented
+route collection. See the final sections for evidence, validation and the installation receipt.
 
-Refactor candidate 0.5.0 is developed separately on codex/route-hud-refactor from the completed
-0.4.2 checkpoint bb92b42. It has not replaced the installed 0.4.2 candidate. See the final refactor
-section below; older candidate status and acceptance notes are retained as history.
+The 0.5.0 refactor was developed on codex/route-hud-refactor from the completed 0.4.2 checkpoint
+bb92b42, then installed at James's request. Older candidate status and acceptance notes below
+are retained as history; the latest installation entry takes precedence.
 
 23 October 2026: James requested keeping the other Route HUD changes while restoring the compact
 Dad's Driving HUD list and addressing the alternating datasets. Candidate 0.4.2 implements that
@@ -519,3 +519,61 @@ The game was not launched. On James's next run, UMM must regenerate a 0.5.0 shad
 version/hash against the installed DLL before attributing runtime results. Visual, signal-stability
 and real frame-time acceptance remain pending. The candidate ZIP was not rebuilt for this
 post-install documentation entry; its bundled handover correctly records the earlier build state.
+
+## 0.5.1 frozen route correction - 23 October 2026
+
+James reported that flicker had stopped but the HUD no longer worked. His screenshot showed live
+metrics, a 0-30 m route graph and one retained event while driving. The installed 0.5.0 DLL and its
+UMM shadow cache had matching version/hash, ruling out the earlier stale-cache incident for this run.
+Player.log contains 33,998 OnUpdate ArgumentNullException entries with the same CarList task traversal
+stack. Passenger Jobs 5.3.1 supplies a valid destination leaf with null nestedTasks; the inherited
+traversal called LINQ Select on that null list. The 0.5.0 refactor moved car-list sampling into Update
+ahead of RouteMonitorService, promoting this existing traversal defect into route-update starvation.
+
+Version 0.5.1 handles those leaves through their actual car membership, state and destination data,
+without a Passenger Jobs reference or hardcoded task type. Row sampling also contains exceptions,
+clears stale rows at the next Layout, deduplicates repeated warnings and retries at the configured
+cadence with a 0.25 s minimum after failures. Successful updates retain the saved cadence. This keeps
+expensive failed reads out of every frame and allows the shared callback to reach route collection.
+The compact list and every other refactor change are retained. Native graph direction matches the
+game's own transitions; no route geometry workaround was added.
+
+James stopped the other Class150 chat and assigned this build here. On takeover, this checkout and
+its only registered worktree were clean at 7f9ee95; the other chat had withdrawn its uncommitted
+passenger-task patch. This build recreates that reviewed fix and adds failure-containment coverage.
+Two agents reviewed the fault, production boundary and tests. The new car-list suite reproduces the
+original exception against HEAD's old implementation, then passes all 33 checks against the fix,
+including null-car leaves, exception containment, Layout consistency, retry cadence and recovery.
+Adjacent historical Route HUD and Driving HUD checkouts are clean; the provenance scratch folder
+contains no additional source fixes.
+
+Full Validate.ps1 now passes with zero build warnings/errors: 599 checks across eight suites,
+51/51 metadata contracts, the 14-file package audit and 12 isolated installer assertions. The DLL is
+187,904 bytes, 512 bytes larger than 0.5.0; no new runtime dependencies were added. The route-service
+test exposed a pre-existing setup timing assumption, independent of CarList: cold JIT exceeded the
+collector's real 2 ms budget, so the initial signal could arrive on frame five rather than four.
+The original harness failed 2/5 fresh processes. Test setup now allows at most 32 updates at the
+original simulated time for native/optional readiness before every original timed assertion; it
+passes 5/5 fresh processes. No route-service production code or lifecycle assertion was changed.
+
+Actual installation is recorded separately below once complete. James launches the game; runtime
+visual, coverage and performance acceptance remain outstanding.
+
+## 0.5.1 installed for James's retest - 23 October 2026
+
+With Derail Valley closed, Install.ps1 installed the audited 0.5.1 package. All 14 installed files
+match the package; assembly version is 0.5.1.0. Package SHA256:
+C122C7CD12E47F643E85D522C2862C6EC31FB3484D554305271085FBE94DE395.
+Installed DLL SHA256: B8A7B88ACB19800CDA1E01E552FF22643C246F9E875A924A4EC08377C66158E7.
+
+Verified full prior mod/settings/cache and original UMM Params.xml backup:
+artifacts/backups/upgrade-0.5.1-8235dee7cf81427bbbbef39d61819f12/.
+The installation-receipt.json there includes final enablement verification. Current Settings.xml
+remains byte-identical (SHA256 1CA78CE317D97EAE86976B72C0333DC98DAE3E3F41DCAFB0384F6104FB1C5A9D).
+Only DadsRouteHUD Enabled=false -> true changed in Params.xml; DadsDrivingHUD was already false and
+remains disabled. Parsed XML matches the original with exactly the requested enablement values;
+every other setting is preserved. Only backed-up DadsRouteHUD.dll.*.cache files were cleared; none
+remain. James launches the next game test and UMM must regenerate its 0.5.1 cache.
+
+The game was not launched and runtime acceptance remains pending. The validated ZIP is unchanged
+by this post-installation source handover entry; its bundled handover records the build state.

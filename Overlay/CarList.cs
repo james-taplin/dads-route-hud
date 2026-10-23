@@ -207,6 +207,8 @@ namespace DvMod.HeadsUpDisplay
         private static TrainCar? sourceFirst, sourceLast;
         private static int sourceCount;
         private static bool sourceReversed, sourceGrouped;
+        private static bool sampleFailed;
+        private static string? lastFailure;
         private static CarRow[] currentRows = Array.Empty<CarRow>();
         private static CarRow[] displayedRows = Array.Empty<CarRow>();
         private static bool showStress, showCoupler, showJobs, showDestinations, showBrakes;
@@ -237,23 +239,43 @@ namespace DvMod.HeadsUpDisplay
             if (ReferenceEquals(sourceTrain, train) && sourceFirst == first && sourceLast == last
                 && sourceCount == train.cars.Count && sourceReversed == reversed
                 && sourceGrouped == settings.groupCarsByJob && now >= lastUpdateTime
-                && now - lastUpdateTime < settings.updatePeriod) return;
-            var cars = train.cars.ToArray();
-            if (reversed) Array.Reverse(cars);
-            var pipe = MakePressureFormatter("Brake pipe");
-            var reservoir = MakePressureFormatter("Aux reservoir");
-            var cylinder = MakePressureFormatter("Brake cylinder");
-            currentRows = GetCarGroups(cars, !settings.groupCarsByJob)
-                .Select(group => CaptureRow(group, pipe, reservoir, cylinder)).ToArray();
+                && now - lastUpdateTime < (sampleFailed ? Math.Max(0.25f, settings.updatePeriod) : settings.updatePeriod)) return;
+            // Remember failed attempts too, so unavailable native data cannot force a retry every frame.
             sourceTrain = train; sourceFirst = first; sourceLast = last;
-            sourceCount = cars.Length; sourceReversed = reversed; sourceGrouped = settings.groupCarsByJob;
+            sourceCount = train.cars.Count; sourceReversed = reversed; sourceGrouped = settings.groupCarsByJob;
             lastUpdateTime = now;
+            try
+            {
+                var cars = train.cars.ToArray();
+                if (reversed) Array.Reverse(cars);
+                var pipe = MakePressureFormatter("Brake pipe");
+                var reservoir = MakePressureFormatter("Aux reservoir");
+                var cylinder = MakePressureFormatter("Brake cylinder");
+                currentRows = GetCarGroups(cars, !settings.groupCarsByJob)
+                    .Select(group => CaptureRow(group, pipe, reservoir, cylinder)).ToArray();
+                sampleFailed = false;
+                lastFailure = null;
+            }
+            catch (Exception exception)
+            {
+                // Train details must not abort the shared Update before route collection can run.
+                currentRows = Array.Empty<CarRow>();
+                sampleFailed = true;
+                var failure = exception.GetType().Name + ": " + exception.Message;
+                if (failure != lastFailure)
+                {
+                    lastFailure = failure;
+                    Main.mod?.Logger.Warning("Car list sampling failed; route collection will continue: " + failure);
+                }
+            }
         }
 
         public static void Reset()
         {
             sourceTrain = null; sourceFirst = sourceLast = null; sourceCount = 0;
             currentRows = Array.Empty<CarRow>();
+            sampleFailed = false;
+            lastFailure = null;
         }
 
         /// <summary>Freeze the row array and columns together for Layout through Repaint.</summary>
@@ -371,8 +393,9 @@ namespace DvMod.HeadsUpDisplay
         private static Track? GetNextDestinationTrack(Task task, Car car)
         {
             var data = task.GetTaskData();
-            if (data.type == TaskType.Transport || data.type == TaskType.Warehouse)
-                return (data.state == TaskState.InProgress && data.cars.Contains(car)) ? data.destinationTrack : null;
+            // Optional job types can supply a destination leaf without a child-task list.
+            if (data.type == TaskType.Transport || data.type == TaskType.Warehouse || data.nestedTasks == null)
+                return (data.state == TaskState.InProgress && data.cars != null && data.cars.Contains(car)) ? data.destinationTrack : null;
             return data.nestedTasks.Select(t => GetNextDestinationTrack(t, car)).FirstOrDefault(track => track != null);
         }
 

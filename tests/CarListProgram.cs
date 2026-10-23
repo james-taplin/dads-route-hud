@@ -83,6 +83,100 @@ internal static class CarListProgram
         CarList.PrepareLayout(DvMod.HeadsUpDisplay.Main.settings.trainInfoSettings);
         Check(Cell(Draw(), "Coupler") == " ", "Missing coupling links safely produce an unavailable stress cell");
 
+        // Passenger Jobs 5.3.1 RuralTaskData has an extended task type and no
+        // nestedTasks. Destination discovery must follow the native data shape.
+        var passenger = Train(MakeCar("Passenger"));
+        var passengerPlatform = new Track();
+        passengerPlatform.ID.FullDisplayID = "Passenger platform";
+        var passengerLeaf = new Task { type = (TaskType)42, nestedTasks = null, destinationTrack = passengerPlatform };
+        passengerLeaf.cars.Add(passenger.logicCar);
+        var passengerSequence = new Task { type = TaskType.Other };
+        passengerSequence.nestedTasks!.Add(passengerLeaf);
+        var passengerJob = new Job();
+        passengerJob.tasks.Add(passengerSequence);
+        passenger.logicCar.Job = passengerJob;
+        CarList.Update(passenger);
+        CarList.PrepareLayout(DvMod.HeadsUpDisplay.Main.settings.trainInfoSettings);
+        Check(Cell(Draw(), "Destination") == "Passenger platform", "An active custom loading leaf preserves its actual destination without traversing null children");
+        passengerLeaf.state = TaskState.Other;
+        Time.unscaledTime += 1;
+        CarList.Update(passenger);
+        CarList.PrepareLayout(DvMod.HeadsUpDisplay.Main.settings.trainInfoSettings);
+        Check(Cell(Draw(), "Destination") == " ", "An inactive custom loading leaf does not claim a destination");
+        passengerLeaf.state = TaskState.InProgress;
+        passengerLeaf.cars.Clear();
+        Time.unscaledTime += 1;
+        CarList.Update(passenger);
+        CarList.PrepareLayout(DvMod.HeadsUpDisplay.Main.settings.trainInfoSettings);
+        Check(Cell(Draw(), "Destination") == " ", "A loading leaf for another car does not claim this passenger car");
+        var freightDestination = new Track();
+        freightDestination.ID.FullDisplayID = "Freight destination";
+        var freightTask = new Task { destinationTrack = freightDestination };
+        freightTask.cars.Add(passenger.logicCar);
+        passengerSequence.nestedTasks.Add(freightTask);
+        Time.unscaledTime += 1;
+        CarList.Update(passenger);
+        CarList.PrepareLayout(DvMod.HeadsUpDisplay.Main.settings.trainInfoSettings);
+        Check(Cell(Draw(), "Destination") == "Freight destination", "A nonmatching custom leaf permits the following native transport task");
+        passengerLeaf.cars.Add(passenger.logicCar);
+        passengerLeaf.destinationTrack = null;
+        Time.unscaledTime += 1;
+        CarList.Update(passenger);
+        CarList.PrepareLayout(DvMod.HeadsUpDisplay.Main.settings.trainInfoSettings);
+        Check(Cell(Draw(), "Destination") == "Freight destination", "A custom leaf without a destination preserves later destination lookup");
+        passengerLeaf.cars = null!;
+        Time.unscaledTime += 1;
+        CarList.Update(passenger);
+        CarList.PrepareLayout(DvMod.HeadsUpDisplay.Main.settings.trainInfoSettings);
+        Check(Cell(Draw(), "Destination") == "Freight destination", "A leaf without cars safely permits a later matching task");
+
+        // A car-details source failure must return control to the caller so the
+        // shared Update callback can continue collecting the route.
+        var samplingSettings = DvMod.HeadsUpDisplay.Main.settings.trainInfoSettings;
+        samplingSettings.updatePeriod = 0.75f;
+        freightTask.ReadFailure = new InvalidOperationException("test task data unavailable");
+        Time.unscaledTime += 1;
+        var warningCount = DvMod.HeadsUpDisplay.Main.mod!.Logger.Warnings.Count;
+        Exception? escaped = null;
+        try { CarList.Update(passenger); }
+        catch (Exception exception) { escaped = exception; }
+        Check(escaped == null, "A task-data sampling failure returns normally to the shared Update caller");
+        Check(Cell(Draw(), "Destination") == "Freight destination", "Failure does not replace displayed rows mid-IMGUI cycle");
+        CarList.PrepareLayout(samplingSettings);
+        Check(Draw().Length == 0, "The next Layout clears stale rows after failed sampling");
+        var failedAttempts = freightTask.ReadAttempts;
+        var failedReads = TestNative.Reads;
+        Time.unscaledTime += 0.5f;
+        CarList.Update(passenger);
+        Check(freightTask.ReadAttempts == failedAttempts && TestNative.Reads == failedReads, "A failed sample honors the configured retry cadence without native reads");
+        Time.unscaledTime += 0.25f;
+        CarList.Update(passenger);
+        Check(freightTask.ReadAttempts == failedAttempts + 1, "A failed sample retries when the configured cadence expires");
+        Check(DvMod.HeadsUpDisplay.Main.mod.Logger.Warnings.Count == warningCount + 1, "Repeated identical sampling failures emit one warning");
+        freightTask.ReadFailure = null;
+        Time.unscaledTime += 0.75f;
+        CarList.Update(passenger);
+        CarList.PrepareLayout(samplingSettings);
+        Check(Cell(Draw(), "Destination") == "Freight destination", "A later successful sample restores the car details");
+
+        samplingSettings.updatePeriod = 0;
+        freightTask.ReadFailure = new InvalidOperationException("test second task failure");
+        CarList.Update(passenger);
+        failedAttempts = freightTask.ReadAttempts;
+        failedReads = TestNative.Reads;
+        Time.unscaledTime += 0.125f;
+        CarList.Update(passenger);
+        Check(freightTask.ReadAttempts == failedAttempts && TestNative.Reads == failedReads, "A zero update period still bounds failed sampling retries");
+        Time.unscaledTime += 0.125f;
+        CarList.Update(passenger);
+        Check(freightTask.ReadAttempts == failedAttempts + 1, "A zero-period failed sample retries after the minimum quarter second");
+        Check(DvMod.HeadsUpDisplay.Main.mod.Logger.Warnings.Count == warningCount + 2, "A distinct sampling failure emits its own single warning");
+        var healthy = Train(MakeCar("Healthy"));
+        CarList.Update(healthy);
+        CarList.PrepareLayout(samplingSettings);
+        Check(Cell(Draw(), "ID") == "Healthy", "Changing the train bypasses a failed sample's retry delay immediately");
+        samplingSettings.updatePeriod = 0.25f;
+
         var d = MakeCar("D"); var e = MakeCar("E");
         var reorder = Train(MakeCar("First"), d, e, MakeCar("Last"));
         CarList.Update(reorder);

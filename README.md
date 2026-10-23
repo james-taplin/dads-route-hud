@@ -29,10 +29,12 @@ The collector reads native geometry and sign metadata without adding sign collid
 
 ## Candidate status
 
-Candidate **0.5.0** is a separate refactor branch, with capture/optional lifecycle, UI sampling,
-sign/settings lookup and failure-path corrections. The installed **0.4.2** remains available for
-James's current test. See [the handover](docs/HANDOVER.md) for independent review, exact checks and
-runtime acceptance still required. No new runtime dependencies were added.
+Candidate **0.5.1** fixes a confirmed freeze in the installed 0.5.0 refactor: a passenger-job task
+without child tasks could throw in car details and prevent route collection from updating.
+Destination leaves now use their supplied car/destination data; car-list sampling failures clear
+the affected rows, retry at a bounded cadence and let route collection continue. The compact list,
+graph, window settings and other refactor changes remain. See [the handover](docs/HANDOVER.md) for
+independent review, exact checks and runtime acceptance still required. No runtime dependencies were added.
 Contributors can run `./Validate.ps1 -GamePath '<game path>'` for the complete local checks;
 this builds/packages/tests without changing the real installation.
 

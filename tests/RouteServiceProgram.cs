@@ -23,6 +23,14 @@ internal static class RouteServiceProgram
         foreach (var bogie in car.Bogies) bogie.track = track;
         RouteMonitorService.Reset();
         OptionalSignalTelemetry.Reset();
+        // The production collector has a real 2 ms frame budget. Cold JIT can split
+        // initial collection across extra frames; settle setup without advancing
+        // simulated time or changing the lifecycle timestamps/assertions below.
+        for (var setupFrame = 0; setupFrame < 32
+            && (OptionalSignalTelemetry.UpcomingSignals.Count == 0 || OptionalSignalTelemetry.IsReading); setupFrame++)
+            Frame(car, 1, 10);
+        if (OptionalSignalTelemetry.UpcomingSignals.Count == 0 || OptionalSignalTelemetry.IsReading)
+            throw new Exception("Initial asynchronous capture did not settle within 32 setup updates");
         for (var i = 0; i < 4; i++) Frame(car, 1 + i * 0.3f, 10);
         Check(RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Initial signal sample is ready");
         var resets = OptionalSignalTelemetry.ResetCount;
