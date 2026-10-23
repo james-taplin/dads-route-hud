@@ -85,6 +85,14 @@ namespace DvMod.HeadsUpDisplay
         public static void Describe(RailTrack track, out string label, out string code) { label = code = track.name; }
         public static string StationNameForTrack(RailTrack track) => "";
     }
+    public static class NativeJunctionNames
+    {
+        public static void Reset() { }
+        public static void Update() { }
+        public static string Describe(Junction junction, RailTrack approachTrack, bool trailing,
+            bool setForRoute, RouteTurnDirection turn) => RouteNaming.SwitchText("", junction.name,
+                junction.selectedBranch, junction.outBranches?.Count ?? 0, trailing, setForRoute, turn);
+    }
     public sealed class NativeRouteSign
     {
         public double Span;

@@ -79,6 +79,7 @@ namespace DvMod.HeadsUpDisplay
             refreshPending = false;
             nextRefresh = nextPublish = 0;
             topologyCursor = 0;
+            NativeJunctionNames.Reset();
             NativeTrackNames.Reset();
             Current = RouteSnapshot<RailTrack>.Empty(Main.settings.trackInfoSettings.maxEventSpan);
         }
@@ -89,6 +90,7 @@ namespace DvMod.HeadsUpDisplay
         {
             try
             {
+                NativeJunctionNames.Update();
                 car = DrivenCar(car);
                 if (!TryAnchor(car, out var track, out var span, out var forward, out var vehicleForward))
                 {
@@ -124,6 +126,7 @@ namespace DvMod.HeadsUpDisplay
             if (geometryChanged)
             {
                 geometryChanged = false;
+                NativeJunctionNames.Reset();
                 refreshPending = true;
             }
             located = false;
@@ -378,7 +381,6 @@ namespace DvMod.HeadsUpDisplay
                     var junction = interval.Forward ? interval.Track.outJunction : interval.Track.inJunction;
                     if (junction != null)
                     {
-                        var count = junction.outBranches?.Count ?? 0;
                         // Approached from the junction's own in-branch the route diverges, so the
                         // selected branch has a side; approached from a branch it converges instead.
                         var trailing = junction.inBranch?.track != interval.Track;
@@ -387,9 +389,8 @@ namespace DvMod.HeadsUpDisplay
                             && junction.outBranches[junction.selectedBranch]?.track == interval.Track;
                         var turn = trailing ? RouteTurnDirection.Unknown
                             : TurnAt(interval, index + 1 < intervals.Count ? intervals[index + 1] : (RouteInterval<RailTrack>?)null);
-                        var junctionLabel = RouteNaming.SwitchText(
-                            NativeTrackNames.StationNameForTrack(interval.Track), junction.name,
-                            junction.selectedBranch, count, trailing, setForRoute, turn);
+                        var junctionLabel = NativeJunctionNames.Describe(junction, interval.Track,
+                            trailing, setForRoute, turn);
                         collectingEvents.Add(new RouteEvent("junction:" + junction.GetInstanceID() + ":encounter:" + index,
                             interval.EndDistance, RouteEventKind.Junction, junctionLabel,
                             code: junction.name, marker: RouteTurn.Marker(turn)));

@@ -7,6 +7,7 @@ using System.Reflection;
 using DV.Signs;
 using HarmonyLib;
 using UnityEngine;
+using UnityModManagerNet;
 
 namespace DvMod.HeadsUpDisplay
 {
@@ -29,16 +30,8 @@ namespace DvMod.HeadsUpDisplay
     /// </summary>
     public static class NativeRouteSignIndex
     {
-        private static readonly Type? signDataType = typeof(SignPlacer).GetNestedType("SignData", BindingFlags.NonPublic);
-        private static readonly MethodInfo? getTrack = signDataType?.GetMethod("GetTrack");
-        private static readonly MethodInfo? getPosition = signDataType?.GetMethod("GetPosition");
-        private static readonly MethodInfo? getRotation = signDataType?.GetMethod("GetRotation");
-        private static readonly MethodInfo? getSign = signDataType?.GetMethod("GetSign");
-        private static readonly FieldInfo? flip = signDataType?.GetField("flip", BindingFlags.NonPublic | BindingFlags.Instance);
+        private static readonly Dictionary<Type, PlacerContract> contracts = new Dictionary<Type, PlacerContract>();
         private static readonly FieldInfo? rawParts = typeof(Sign).GetField("signParameters", BindingFlags.NonPublic | BindingFlags.Instance);
-        private static readonly MethodInfo? trackPlan = typeof(SignPlacer).GetMethod("GetTrackSigns", BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(RailTrack), typeof(bool) }, null);
-        private static readonly MethodInfo? junctionPlan = typeof(SignPlacer).GetMethod("GetJunctionSigns", BindingFlags.NonPublic | BindingFlags.Instance, null, new[] { typeof(Junction) }, null);
-        private static readonly MethodInfo? shouldInclude = typeof(SignPlacer).GetMethod("ShouldIncludeTrack", BindingFlags.NonPublic | BindingFlags.Static);
         private static readonly Dictionary<int, Source> sources = new Dictionary<int, Source>();
         private static readonly Dictionary<RailTrack, HashSet<int>> sourceIdsByTrack = new Dictionary<RailTrack, HashSet<int>>();
         private static readonly Dictionary<RailTrack, IReadOnlyList<NativeRouteSign>> cache = new Dictionary<RailTrack, IReadOnlyList<NativeRouteSign>>();
@@ -49,7 +42,7 @@ namespace DvMod.HeadsUpDisplay
         private static readonly Dictionary<Cell, List<ObservedRoot>> observed = new Dictionary<Cell, List<ObservedRoot>>();
         private static readonly Dictionary<int, ObservedRoot> observedById = new Dictionary<int, ObservedRoot>();
         private static readonly Dictionary<RailTrack, PlanCounts> planCounts = new Dictionary<RailTrack, PlanCounts>();
-        private static SignPlacer[] placers = Array.Empty<SignPlacer>();
+        private static Component[] placers = Array.Empty<Component>();
         private static float nextPrune;
         private static Vector3 indexedWorldMove;
         private static bool observedReady;
@@ -83,9 +76,10 @@ namespace DvMod.HeadsUpDisplay
             {
                 if (!sources.TryGetValue(sourceId, out var source)) continue;
                 if (source.Root == null || ambiguousRoots.Contains(source.Id)) continue;
-                // The offset cancels the native pole's lateral displacement. Keep the
-                // known track association even after a world-origin shift.
-                var anchor = source.Root.transform.position + source.AnchorOffset;
+                // Placement supplied the actual track anchor. Preserve it independently
+                // of later clearance adjustments to the visible pole, and evaluate it
+                // in the current scene frame after origin shifts.
+                var anchor = source.Anchor + WorldMover.currentMove;
                 if (!NativeRouteGeometry.TryProjectKnownTrack(track, anchor, out var span))
                 {
                     Problem("Known-track sign projection unavailable: " + source.Id);
@@ -126,7 +120,7 @@ namespace DvMod.HeadsUpDisplay
             watched.Clear(); bootstrapped.Clear(); cache.Clear(); sources.Clear(); ambiguousRoots.Clear();
             sourceIdsByTrack.Clear();
             observed.Clear(); observedById.Clear(); problems.Clear(); planCounts.Clear();
-            placers = Array.Empty<SignPlacer>();
+            placers = Array.Empty<Component>();
             observedReady = false;
             nextPrune = 0;
             SnapshotRevision++;
@@ -140,16 +134,17 @@ namespace DvMod.HeadsUpDisplay
             SnapshotRevision++;
         }
 
-        private static void ObservePlacement(SignPlacer placer, object data, GameObject root)
+        private static void ObservePlacement(Component placer, object data, GameObject root)
         {
             if (root == null) return;
             try
             {
-                var track = getTrack?.Invoke(data, null) as RailTrack;
-                if (track == null || !(getPosition?.Invoke(data, null) is Vector3 anchor)
-                    || !(flip?.GetValue(data) is bool isFlipped))
+                var contract = Contract(placer.GetType());
+                var track = contract.GetTrack?.Invoke(data, null) as RailTrack;
+                if (track == null || !(contract.GetPosition?.Invoke(data, null) is Vector3 anchor)
+                    || !(contract.Flip?.GetValue(data) is bool isFlipped))
                 { Problem("Native sign placement metadata unavailable: " + root.GetInstanceID()); return; }
-                var parts = ReadParts(data, root);
+                var parts = ReadParts(contract, data, root);
                 Register(new Source(root, track, !isFlipped, anchor - root.transform.position, parts, true));
                 observedReady = false;
             }
@@ -195,22 +190,22 @@ namespace DvMod.HeadsUpDisplay
             // exact association. A second geometric recipe pass adds no evidence.
             if (observedById.Count > 0 && observedById.Keys.All(id => sources.ContainsKey(id))) return;
             if (placers.Length == 0) { Problem("No live native sign placer available for late-enable validation"); return; }
-            if (trackPlan == null || junctionPlan == null || shouldInclude == null || getPosition == null || getRotation == null || getTrack == null || flip == null)
-            { Problem("Native sign recipe contract unavailable"); return; }
             foreach (var placer in placers)
             {
                 if (placer == null) continue;
                 try
                 {
+                    var contract = Contract(placer.GetType());
+                    if (!contract.Ready) { Problem("Sign recipe contract unavailable: " + placer.GetType().FullName); continue; }
                     var boundTrack = placer.GetComponent<RailTrack>();
                     var includeTrack = boundTrack != null ? boundTrack == track
-                        : shouldInclude.Invoke(null, new object[] { track }) is bool include && include;
-                    if (placer.placeTrackSigns && includeTrack)
+                        : contract.ShouldInclude!.Invoke(null, new object[] { track }) is bool include && include;
+                    if (contract.PlaceTrackSigns!.GetValue(placer) is true && includeTrack)
                     {
-                        MatchPlans(placer, trackPlan.Invoke(placer, new object[] { track, false }) as IEnumerable, track, counts);
-                        MatchPlans(placer, trackPlan.Invoke(placer, new object[] { track, true }) as IEnumerable, track, counts);
+                        MatchPlans(placer, contract, contract.TrackPlan!.Invoke(placer, new object[] { track, false }) as IEnumerable, track, counts);
+                        MatchPlans(placer, contract, contract.TrackPlan.Invoke(placer, new object[] { track, true }) as IEnumerable, track, counts);
                     }
-                    if (placer.placeJunctionSigns)
+                    if (contract.PlaceJunctionSigns!.GetValue(placer) is true)
                     {
                         var boundJunction = placer.GetComponent<Junction>();
                         var junctions = new HashSet<Junction>();
@@ -218,30 +213,33 @@ namespace DvMod.HeadsUpDisplay
                         if (track.outJunction != null) junctions.Add(track.outJunction);
                         foreach (var junction in junctions)
                             if (junction.inBranch.track == track && (boundJunction == null || boundJunction == junction))
-                                MatchPlans(placer, junctionPlan.Invoke(placer, new object[] { junction }) as IEnumerable, track, counts);
+                                MatchPlans(placer, contract, contract.JunctionPlan!.Invoke(placer, new object[] { junction }) as IEnumerable, track, counts);
                     }
                 }
                 catch (Exception exception) { Problem("Native sign validation unavailable on " + track.name + ": " + exception.GetBaseException().Message); }
             }
         }
 
-        private static void MatchPlans(SignPlacer placer, IEnumerable? plans, RailTrack requestedTrack, PlanCounts counts)
+        private static void MatchPlans(Component placer, PlacerContract contract, IEnumerable? plans, RailTrack requestedTrack, PlanCounts counts)
         {
             if (plans == null) { Problem("Native sign plan unavailable: " + requestedTrack.name); return; }
             foreach (var data in plans)
             {
                 if (data == null) continue;
-                var track = getTrack!.Invoke(data, null) as RailTrack;
+                var track = contract.GetTrack!.Invoke(data, null) as RailTrack;
                 if (track == null || track != requestedTrack) continue;
-                if (placer.noSignsTrackNameMarks != null && placer.noSignsTrackNameMarks.Any(mark => mark != null && track.name.StartsWith(mark))) continue;
-                if (!(getPosition!.Invoke(data, null) is Vector3 anchor) || !(getRotation!.Invoke(data, null) is Quaternion rotation)
-                    || !(flip!.GetValue(data) is bool isFlipped))
+                var excluded = contract.NoSignsMarks!.GetValue(placer) as IEnumerable<string>;
+                if (excluded != null && excluded.Any(mark => mark != null && track.name.StartsWith(mark))) continue;
+                if (!(contract.GetPosition!.Invoke(data, null) is Vector3 anchor) || !(contract.GetRotation!.Invoke(data, null) is Quaternion rotation)
+                    || !(contract.Flip!.GetValue(data) is bool isFlipped))
                 { counts.Unmatched++; Problem("Invalid native sign recipe: " + track.name); continue; }
-                var expected = anchor + rotation * Vector3.left * placer.sideways;
+                if (!(contract.Sideways!.GetValue(placer) is float sideways))
+                { counts.Unmatched++; Problem("Native sign sideways offset unavailable: " + track.name); continue; }
+                var expected = anchor + rotation * Vector3.left * sideways;
                 var euler = rotation.eulerAngles;
                 euler.x = 0;
                 var facing = Quaternion.Euler(euler);
-                var parts = ReadParts(data, null);
+                var parts = ReadParts(contract, data, null);
                 var signature = Signature(parts);
                 var text = VisibleText(parts);
                 var candidates = Candidates(expected).Where(root => root.Root != null
@@ -274,14 +272,20 @@ namespace DvMod.HeadsUpDisplay
             if (observedReady && WorldMover.currentMove == indexedWorldMove) return;
             var previous = observedById.ToDictionary(pair => pair.Key, pair => pair.Value.ContentSignature);
             observed.Clear(); observedById.Clear();
-            placers = UnityEngine.Object.FindObjectsOfType<SignPlacer>();
+            var previousPlacers = placers;
+            var foundPlacers = UnityEngine.Object.FindObjectsOfType<SignPlacer>().Cast<Component>();
+            var doubleTrack = DoubleTrackPlacerType();
+            if (doubleTrack != null)
+                foundPlacers = foundPlacers.Concat(UnityEngine.Object.FindObjectsOfType(doubleTrack).OfType<Component>());
+            placers = foundPlacers.ToArray();
             foreach (var debug in UnityEngine.Object.FindObjectsOfType<SignDebug>())
                 AddObserved(debug.gameObject, debug.text);
             foreach (var data in UnityEngine.Object.FindObjectsOfType<SignGeneratorData>())
                 AddObserved(data.gameObject, data.GetComponent<SignDebug>()?.text ?? "");
             indexedWorldMove = WorldMover.currentMove;
             observedReady = true;
-            if (previous.Count != observedById.Count || observedById.Any(pair =>
+            if (previousPlacers.Length != placers.Length || previousPlacers.Any(old => !placers.Contains(old))
+                || previous.Count != observedById.Count || observedById.Any(pair =>
                 !previous.TryGetValue(pair.Key, out var signature) || signature != pair.Value.ContentSignature))
             {
                 // Late-generated or edited signs deserve another validation pass. Do
@@ -312,11 +316,11 @@ namespace DvMod.HeadsUpDisplay
                             foreach (var entry in group) yield return entry;
         }
 
-        private static SignParameters[] ReadParts(object data, GameObject? root)
+        private static SignParameters[] ReadParts(PlacerContract contract, object data, GameObject? root)
         {
             var generated = root != null ? root.GetComponent<SignGeneratorData>() : null;
             if (generated != null && generated.signParameters != null) return generated.signParameters.ToArray();
-            var recipe = getSign?.Invoke(data, null);
+            var recipe = contract.GetSign?.Invoke(data, null);
             var values = recipe != null ? rawParts?.GetValue(recipe) as IEnumerable<SignParameters> : null;
             return values?.ToArray() ?? Array.Empty<SignParameters>();
         }
@@ -363,11 +367,80 @@ namespace DvMod.HeadsUpDisplay
                 && !double.IsNaN(value) && !double.IsInfinity(value);
         private static void Problem(string message) { if (problems.Add(message)) SnapshotRevision++; }
 
+        private static Type? DoubleTrackPlacerType()
+        {
+            // DoubleTrack replaces SignPlacer rather than calling its PlaceSign.
+            // Bind only the existing active optional mod; never add a static dependency.
+            var mod = UnityModManager.FindMod("DoubleTrack");
+            return mod != null && mod.Loaded && mod.Active
+                ? mod.Assembly?.GetType("DV.Signs.CustomSignPlacer", false) : null;
+        }
+        private static PlacerContract Contract(Type type)
+        {
+            if (typeof(SignPlacer).IsAssignableFrom(type)) type = typeof(SignPlacer);
+            if (!contracts.TryGetValue(type, out var contract))
+                contracts[type] = contract = new PlacerContract(type);
+            return contract;
+        }
+
+        private sealed class PlacerContract
+        {
+            public readonly MethodInfo? GetTrack, GetPosition, GetRotation, GetSign, TrackPlan, JunctionPlan, ShouldInclude, PlaceSign;
+            public readonly FieldInfo? Flip, Sideways, PlaceTrackSigns, PlaceJunctionSigns, NoSignsMarks;
+            public readonly bool Ready;
+            public PlacerContract(Type type)
+            {
+                const BindingFlags instance = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic;
+                var data = type.GetNestedType("SignData", BindingFlags.NonPublic);
+                GetTrack = data?.GetMethod("GetTrack");
+                GetPosition = data?.GetMethod("GetPosition");
+                GetRotation = data?.GetMethod("GetRotation");
+                GetSign = data?.GetMethod("GetSign");
+                Flip = data?.GetField("flip", instance);
+                TrackPlan = type.GetMethod("GetTrackSigns", instance, null, new[] { typeof(RailTrack), typeof(bool) }, null);
+                JunctionPlan = type.GetMethod("GetJunctionSigns", instance, null, new[] { typeof(Junction) }, null);
+                ShouldInclude = type.GetMethod("ShouldIncludeTrack", BindingFlags.NonPublic | BindingFlags.Static, null, new[] { typeof(RailTrack) }, null);
+                PlaceSign = data == null ? null : type.GetMethod("PlaceSign", instance, null, new[] { data }, null);
+                Sideways = type.GetField("sideways", instance);
+                PlaceTrackSigns = type.GetField("placeTrackSigns", instance);
+                PlaceJunctionSigns = type.GetField("placeJunctionSigns", instance);
+                NoSignsMarks = type.GetField("noSignsTrackNameMarks", instance);
+                Ready = typeof(Component).IsAssignableFrom(type)
+                    && GetTrack?.ReturnType == typeof(RailTrack) && GetPosition?.ReturnType == typeof(Vector3)
+                    && GetRotation?.ReturnType == typeof(Quaternion) && GetSign?.ReturnType == typeof(Sign)
+                    && Flip?.FieldType == typeof(bool) && Sideways?.FieldType == typeof(float)
+                    && PlaceTrackSigns?.FieldType == typeof(bool) && PlaceJunctionSigns?.FieldType == typeof(bool)
+                    && NoSignsMarks != null && typeof(IEnumerable<string>).IsAssignableFrom(NoSignsMarks.FieldType)
+                    && TrackPlan != null && typeof(IEnumerable).IsAssignableFrom(TrackPlan.ReturnType)
+                    && JunctionPlan != null && typeof(IEnumerable).IsAssignableFrom(JunctionPlan.ReturnType)
+                    && ShouldInclude?.ReturnType == typeof(bool);
+            }
+        }
+
         [HarmonyPatch(typeof(SignPlacer), "PlaceSign")]
         private static class ObserveNativePlacement
         {
             [HarmonyPostfix, HarmonyPriority(Priority.Last)]
             private static void Postfix(SignPlacer __instance, object __0, GameObject __result)
+                => ObservePlacement(__instance, __0, __result);
+        }
+
+        [HarmonyPatch]
+        private static class ObserveDoubleTrackPlacement
+        {
+            private static bool Prepare()
+            {
+                var type = DoubleTrackPlacerType();
+                if (type == null) return false;
+                var contract = Contract(type);
+                if (contract.Ready && contract.PlaceSign?.ReturnType == typeof(GameObject)) return true;
+                Problem("DoubleTrack sign placement contract unavailable; coverage partial");
+                return false;
+            }
+            private static MethodBase? TargetMethod()
+                => DoubleTrackPlacerType() is Type type ? Contract(type).PlaceSign : null;
+            [HarmonyPostfix, HarmonyPriority(Priority.Last)]
+            private static void Postfix(Component __instance, object __0, GameObject __result)
                 => ObservePlacement(__instance, __0, __result);
         }
 
@@ -377,11 +450,15 @@ namespace DvMod.HeadsUpDisplay
             public readonly int Id;
             public readonly RailTrack Track;
             public readonly bool Forward;
-            public readonly Vector3 AnchorOffset;
+            public readonly Vector3 Anchor;
             public readonly SignParameters[] Parts;
             public readonly bool Captured;
             public Source(GameObject root, RailTrack track, bool forward, Vector3 offset, SignParameters[] parts, bool captured)
-            { Root = root; Id = root.GetInstanceID(); Track = track; Forward = forward; AnchorOffset = offset; Parts = parts; Captured = captured; }
+            {
+                Root = root; Id = root.GetInstanceID(); Track = track; Forward = forward;
+                Anchor = root.transform.position + offset - WorldMover.currentMove;
+                Parts = parts; Captured = captured;
+            }
         }
         private sealed class ObservedRoot
         {

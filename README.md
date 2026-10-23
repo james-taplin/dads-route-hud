@@ -7,7 +7,8 @@ One HUD with compact columns or a horizontal driving strip, selected in UMM. Bot
 - Choose Driving strip or Compact columns; choose Route graph, Route event list, or Graph + events.
 - Click **Detach route** in the HUD header to move the graph into its own window. Click **Attach** in that window (or **Attach route** in the HUD) to return it. Header actions stay visible while scrolling and remain usable with geometry locked. Use the native free cursor for these controls.
 - UMM also provides an **Attached to HUD / Detached window** selector, visibility, collection range (100–50,000 m), profile height and displayed content.
-- Show/hide tracks, junctions, speed/grade signs, signals, other signs and opposing observations. These are display filters; all observations remain in the complete UMM catalogue.
+- The route list scrolls through every matching event, with wrapped, bold colour-coded names and no page-size limit. Station tracks use the game's station names; mainline junctions show connected station destinations and the selected branch. Unresolved destinations remain explicit.
+- Show/hide tracks, junctions, speed/grade signs, signals, other signs and opposing observations. Hidden counts and incomplete coverage are stated beside the list; all observations remain in the complete UMM catalogue.
 - Choose separate background and text/graphics opacity for each window. Metric selection/order/units and train details remain configurable.
 - With the native game cursor available, drag a header or its lower-right grip. Both windows scroll when content exceeds the chosen size. UMM also provides explicit size fields and an optional geometry lock.
 - The main HUD starts at the actual screen's top right with a 10px margin. Geometry is remembered after dragging/resizing. Reset windows restores the default top-right placement; the separate graph starts below where space permits.
@@ -29,12 +30,12 @@ The collector reads native geometry and sign metadata without adding sign collid
 
 ## Candidate status
 
-Candidate **0.5.1** fixes a confirmed freeze in the installed 0.5.0 refactor: a passenger-job task
-without child tasks could throw in car details and prevent route collection from updating.
-Destination leaves now use their supplied car/destination data; car-list sampling failures clear
-the affected rows, retry at a bounded cadence and let route collection continue. The compact list,
-graph, window settings and other refactor changes remain. See [the handover](docs/HANDOVER.md) for
-independent review, exact checks and runtime acceptance still required. No runtime dependencies were added.
+Candidate **0.5.2** makes the route list readable and fully scrollable, names junction destinations
+from native track connections, and supports DoubleTrack's separate speed/grade sign placer.
+Exact captured sign anchors also survive later pole-clearance adjustments. It retains the 0.5.1
+passenger-task freeze fix, graph, window settings and other refactor changes. See
+[the handover](docs/HANDOVER.md) for evidence, independent review, exact checks and runtime acceptance
+still required. No runtime dependencies were added; optional mods remain optional.
 Contributors can run `./Validate.ps1 -GamePath '<game path>'` for the complete local checks;
 this builds/packages/tests without changing the real installation.
 

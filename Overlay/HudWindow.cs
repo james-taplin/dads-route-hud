@@ -14,6 +14,9 @@ namespace DvMod.HeadsUpDisplay
         private Rect startRect;
         private Rect frameRect;
         private Vector2 scroll;
+        private float bodyHeight;
+        public float VisibleContentTop => scroll.y;
+        public float VisibleContentBottom => scroll.y + bodyHeight;
         public bool OwnsInput => control != 0 && GUIUtility.hotControl == control;
 
         public HudWindow(float minimumWidth, float minimumHeight = 120) { this.minimumWidth = minimumWidth; this.minimumHeight = minimumHeight; }
@@ -124,7 +127,7 @@ namespace DvMod.HeadsUpDisplay
                     headerAction?.Invoke();
                 if (secondRow && GUI.Button(secondRect, secondActionLabel, Styles.button)) secondAction?.Invoke();
                 GUI.enabled = savedEnabled;
-                var bodyHeight = Mathf.Max(1, frameRect.height - headerHeight - pad * 2);
+                bodyHeight = Mathf.Max(1, frameRect.height - headerHeight - pad * 2);
                 var bodyWidth = Mathf.Max(1, frameRect.width - pad * 2);
                 GUILayout.BeginArea(new Rect(frameRect.x + pad, frameRect.y + headerHeight, bodyWidth, bodyHeight));
                 scroll = GUILayout.BeginScrollView(scroll, GUILayout.Width(bodyWidth), GUILayout.Height(bodyHeight));

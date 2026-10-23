@@ -15,6 +15,9 @@ namespace DvMod.HeadsUpDisplay
         public static readonly GUIStyle centeredBold;
         public static readonly GUIStyle rightAlign;
         public static readonly GUIStyle richText;
+        public static readonly GUIStyle wrappedText;
+        public static readonly GUIStyle routeText;
+        public static readonly GUIStyle routeDistance;
         public static readonly GUIStyle panel;
         /// <summary>Overlay buttons, sized from the HUD's own font rather than the default skin.</summary>
         public static readonly GUIStyle button;
@@ -44,6 +47,9 @@ namespace DvMod.HeadsUpDisplay
             centeredBold = new GUIStyle(noWrapBold) { alignment = TextAnchor.MiddleCenter };
             rightAlign = new GUIStyle(noWrap) { alignment = TextAnchor.MiddleRight };
             richText = new GUIStyle(noWrap) { richText = true };
+            wrappedText = new GUIStyle(noWrap) { wordWrap = true };
+            routeText = new GUIStyle(wrappedText) { richText = true };
+            routeDistance = new GUIStyle(rightAlign) { fontStyle = FontStyle.Bold, alignment = TextAnchor.UpperRight };
             panel = new GUIStyle { padding = new RectOffset(10, 10, 8, 8), margin = new RectOffset() };
             button = new GUIStyle(GUI.skin.button) { wordWrap = false, alignment = TextAnchor.MiddleCenter };
         }
@@ -58,6 +64,14 @@ namespace DvMod.HeadsUpDisplay
             {
                 style.fontSize = fontSize;
                 style.fixedHeight = fontSize + 6;
+                style.margin = new RectOffset();
+                style.padding = new RectOffset();
+                style.normal.textColor = Color.white;
+            }
+            foreach (var style in new[] { wrappedText, routeText, routeDistance })
+            {
+                style.fontSize = fontSize;
+                style.fixedHeight = 0;
                 style.margin = new RectOffset();
                 style.padding = new RectOffset();
                 style.normal.textColor = Color.white;
@@ -79,6 +93,12 @@ namespace DvMod.HeadsUpDisplay
         {
             measurement.text = text;
             return Mathf.Ceil(style.CalcSize(measurement).x) + 1;
+        }
+
+        public static float TextHeight(string text, GUIStyle style, float width)
+        {
+            measurement.text = text;
+            return Mathf.Ceil(style.CalcHeight(measurement, width));
         }
     }
 
@@ -105,11 +125,17 @@ namespace DvMod.HeadsUpDisplay
         private readonly List<(string label, string value, float labelWidth, float valueWidth)> metrics =
             new List<(string, string, float, float)>();
         private readonly List<List<int>> metricRows = new List<List<int>>();
-        private RoutePage<RouteEvent>? eventPage;
-        private readonly List<(string distance, string description)> eventRows = new List<(string, string)>();
-        private float eventDistanceWidth, eventDescriptionWidth;
-        private string eventHeading = "", eventPageLabel = "";
-        private int requestedPage;
+        private readonly List<(string distance, string description, float height)> eventRows =
+            new List<(string, string, float)>();
+        private Dictionary<string, (RouteEvent source, string description, float height)> eventRowCache =
+            new Dictionary<string, (RouteEvent, string, float)>(StringComparer.Ordinal);
+        private Dictionary<string, float> eventDistanceWidths = new Dictionary<string, float>(StringComparer.Ordinal);
+        private RouteListLayout eventListLayout = new RouteListLayout(Array.Empty<float>());
+        private RouteSnapshot<RailTrack>? eventSnapshot;
+        private float eventDistanceWidth, eventDescriptionWidth, eventCapturedWidth;
+        private int eventFontSize, eventPadding, eventFilterKey;
+        private Settings.TrackInfoSettings.EventDistanceUnits eventDistanceUnits;
+        private string eventHeading = "", eventFilters = "", eventCoverage = "", eventWarning = "";
         private readonly Settings.TrainInfoSettings trainSettings = new Settings.TrainInfoSettings();
 
         public void Start()
@@ -240,27 +266,82 @@ namespace DvMod.HeadsUpDisplay
             if ((showMain && dockGraph) || showGraph)
                 RouteMonitor.PrepareLayout(route,
                     showGraph ? graphRect.width - Styles.ContentInset : innerWidth, fontSize, layout);
-            if (showMain && showEvents) CaptureEventRows(route, layout.inspectorPageSize);
+            if (showMain && showEvents) CaptureEventRows(route);
             CaptureMetrics(settings.drivingInfoSettings);
             layoutReady = true;
         }
-        private void CaptureEventRows(RouteSnapshot<RailTrack> route, int pageSize)
+        private void CaptureEventRows(RouteSnapshot<RailTrack> route)
         {
-            var visible = route.Events.Where(RouteMonitor.IsVisible).ToArray();
-            eventPage = RoutePaging.GetPage(visible, requestedPage, pageSize);
-            requestedPage = eventPage.PageIndex;
-            eventHeading = $"Route events  {eventPage.TotalCount} displayed / {route.Events.Count} retained";
-            eventPageLabel = $"Page {(eventPage.PageCount == 0 ? 0 : eventPage.PageIndex + 1)} / {eventPage.PageCount}";
+            var layout = Main.settings.layoutSettings;
+            var filterKey = (layout.showTracks ? 1 : 0) | (layout.showJunctions ? 2 : 0)
+                | (layout.showSpeeds ? 4 : 0) | (layout.showGrades ? 8 : 0) | (layout.showSignals ? 16 : 0)
+                | (layout.showOtherSigns ? 32 : 0) | (layout.showOpposite ? 64 : 0);
+            var units = Main.settings.trackInfoSettings.distanceUnits;
+            if (ReferenceEquals(eventSnapshot, route) && eventCapturedWidth == innerWidth
+                && eventFontSize == fontSize && eventPadding == Styles.Padding
+                && eventFilterKey == filterKey && eventDistanceUnits == units) return;
+            var visible = new List<RouteEvent>();
+            var opposingHidden = 0;
+            foreach (var item in route.Events)
+            {
+                if (RouteMonitor.IsVisible(item)) visible.Add(item);
+                else if (!item.AppliesToTravel && !layout.showOpposite) opposingHidden++;
+            }
+            var filtered = route.Events.Count - visible.Count - opposingHidden;
+            eventHeading = $"Route ahead · {visible.Count} events · scroll for all";
+            eventFilters = opposingHidden > 0 ? opposingHidden + " opposite-facing hidden" : "";
+            if (filtered > 0) eventFilters += (eventFilters.Length > 0 ? " · " : "") + filtered + " hidden by type filters";
+            eventCoverage = $"Mapped {RouteMonitor.EventDistance(route.ReachedDistance)} / {RouteMonitor.EventDistance(route.RequestedDistance)}"
+                + " · " + RouteListText.Termination(route.Termination)
+                + (route.IsCollecting && route.Termination != RouteWalkTermination.InProgress ? " · refreshing" : "");
+            var warning = RouteListText.CoverageWarning(route.EventCoverage);
+            var signalWarning = RouteListText.SignalCoverageWarning(route.SignalCoverage);
+            if (signalWarning.Length > 0) warning += (warning.Length > 0 ? "\n" : "") + signalWarning;
+            eventWarning = warning.Length == 0 ? "" : "<color=#FFBD59><b>" + warning + "</b></color>";
             eventRows.Clear();
-            eventDistanceWidth = 0;
-            foreach (var item in eventPage.Items)
+            var sameFont = eventFontSize == fontSize;
+            var nextDistanceWidths = new Dictionary<string, float>(StringComparer.Ordinal);
+            eventDistanceWidth = Styles.TextWidth("0 m", Styles.routeDistance);
+            foreach (var item in visible)
             {
                 var distance = RouteMonitor.EventDistance(item.Distance);
-                eventRows.Add((distance, RouteListText.Description(item)));
-                eventDistanceWidth = Mathf.Max(eventDistanceWidth, Styles.TextWidth(distance, Styles.rightAlign));
+                var unchanged = eventRowCache.TryGetValue(item.Id, out var cached) && RouteListText.SameDescription(cached.source, item);
+                eventRows.Add((distance, unchanged ? cached.description : RouteListText.Description(item), 0));
+                if (!nextDistanceWidths.TryGetValue(distance, out var width))
+                {
+                    if (!sameFont || !eventDistanceWidths.TryGetValue(distance, out width))
+                        width = Styles.TextWidth(distance, Styles.routeDistance);
+                    nextDistanceWidths[distance] = width;
+                }
+                eventDistanceWidth = Mathf.Max(eventDistanceWidth, width);
             }
             eventDistanceWidth = Mathf.Min(eventDistanceWidth, Mathf.Max(1, innerWidth - ColumnSpacing - 1));
-            eventDescriptionWidth = Mathf.Max(1, innerWidth - eventDistanceWidth - ColumnSpacing);
+            var descriptionWidth = Mathf.Max(1, innerWidth - eventDistanceWidth - ColumnSpacing);
+            var sameWrapping = sameFont && eventDescriptionWidth == descriptionWidth;
+            eventDescriptionWidth = descriptionWidth;
+            var heights = new float[eventRows.Count];
+            var nextRowCache = new Dictionary<string, (RouteEvent source, string description, float height)>(visible.Count, StringComparer.Ordinal);
+            for (var index = 0; index < eventRows.Count; index++)
+            {
+                var row = eventRows[index];
+                var item = visible[index];
+                var height = sameWrapping && eventRowCache.TryGetValue(item.Id, out var cached)
+                    && cached.description == row.description ? cached.height
+                    : Mathf.Max(fontSize + 6, Styles.TextHeight(row.description, Styles.routeText, eventDescriptionWidth));
+                eventRows[index] = (row.distance, row.description, height);
+                heights[index] = height + Mathf.Max(3, Styles.Padding);
+                nextRowCache[item.Id] = (item, row.description, height);
+            }
+            // Only this generation survives: passed or filtered events cannot accumulate in a history cache.
+            eventRowCache = nextRowCache;
+            eventDistanceWidths = nextDistanceWidths;
+            eventListLayout = new RouteListLayout(heights);
+            eventSnapshot = route;
+            eventCapturedWidth = innerWidth;
+            eventFontSize = fontSize;
+            eventPadding = Styles.Padding;
+            eventFilterKey = filterKey;
+            eventDistanceUnits = units;
         }
         private void CaptureMetrics(Settings.DrivingInfoSettings settings)
         {
@@ -333,27 +414,28 @@ namespace DvMod.HeadsUpDisplay
         }
         private void DrawEvents()
         {
-            if (eventPage == null) return;
             GUILayout.Space(4);
-            GUILayout.Label(eventHeading, Styles.noWrapBold, GUILayout.Width(innerWidth));
-            GUILayout.BeginHorizontal();
-            var enabled = GUI.enabled;
-            GUI.enabled = enabled && eventPage.PageIndex > 0;
-            if (GUILayout.Button("Previous", Styles.button, GUILayout.ExpandWidth(false))) requestedPage--;
-            GUI.enabled = enabled && eventPage.PageIndex + 1 < eventPage.PageCount;
-            if (GUILayout.Button("Next", Styles.button, GUILayout.ExpandWidth(false))) requestedPage++;
-            GUI.enabled = enabled;
-            GUILayout.Label(eventPageLabel, Styles.noWrap);
-            GUILayout.EndHorizontal();
-            // Dad's Driving HUD's measured distance + description layout. Keep the entire
-            // retained catalogue and paging, but leave source diagnostics in the inspector.
-            foreach (var row in eventRows)
+            GUILayout.Label("<b>" + eventHeading + "</b>", Styles.routeText, GUILayout.Width(innerWidth));
+            if (eventFilters.Length > 0) GUILayout.Label(eventFilters, Styles.wrappedText, GUILayout.Width(innerWidth));
+            GUILayout.Label(eventCoverage, Styles.wrappedText, GUILayout.Width(innerWidth));
+            if (eventWarning.Length > 0) GUILayout.Label(eventWarning, Styles.routeText, GUILayout.Width(innerWidth));
+            GUILayout.Space(4);
+            // One passive area represents the complete list. Wrapped rows are frozen at Layout;
+            // only rows inside the existing window's scroll viewport need repainting.
+            var area = GUILayoutUtility.GetRect(innerWidth, eventListLayout.Height,
+                GUILayout.Width(innerWidth), GUILayout.Height(eventListLayout.Height));
+            if (Event.current.type != EventType.Repaint) return;
+            // Both the GUILayout area and HudWindow's scroll offsets use content coordinates.
+            // Subtracting the area's origin also handles metrics/graph/header content above it.
+            var visible = eventListLayout.VisibleRows(mainWindow.VisibleContentTop - area.y,
+                mainWindow.VisibleContentBottom - area.y);
+            for (var index = visible.first; index < visible.first + visible.count; index++)
             {
-                GUILayout.BeginHorizontal(GUILayout.Width(innerWidth));
-                GUILayout.Label(row.distance, Styles.rightAlign, GUILayout.Width(eventDistanceWidth));
-                GUILayout.Space(ColumnSpacing);
-                GUILayout.Label(row.description, Styles.richText, GUILayout.Width(eventDescriptionWidth));
-                GUILayout.EndHorizontal();
+                var row = eventRows[index];
+                var y = area.y + eventListLayout.Top(index);
+                GUI.Label(new Rect(area.x, y, eventDistanceWidth, row.height), row.distance, Styles.routeDistance);
+                GUI.Label(new Rect(area.x + eventDistanceWidth + ColumnSpacing, y, eventDescriptionWidth, row.height),
+                    row.description, Styles.routeText);
             }
         }
         private void CopyTrainSettings()

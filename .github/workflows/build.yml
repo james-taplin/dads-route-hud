@@ -30,6 +30,8 @@ jobs:
         run: dotnet run --project tests/RouteService.Tests.csproj --configuration Release -p:NuGetAudit=false
       - name: Native geometry and selected branches with test doubles
         run: dotnet run --project tests/NativeGeometry.Tests.csproj --configuration Release -p:NuGetAudit=false
+      - name: Native station names and junction destinations with test doubles
+        run: dotnet run --project tests/NativeNames.Tests.csproj --configuration Release -p:NuGetAudit=false
       - name: Native sign association and lifetime with test doubles
         run: dotnet run --project tests/NativeSigns.Tests.csproj --configuration Release -p:NuGetAudit=false
       - name: Actual optional adapter with reflection boundary doubles

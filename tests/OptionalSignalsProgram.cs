@@ -50,6 +50,7 @@ internal static class OptionalSignalsProgram
     {
         AbsentSources();
         RetentionAndCoverage();
+        UnplacedControllerKinds();
         SourceLifetimeAndCancellation();
         TrafficEnrichment();
         OptionalSignalTelemetry.Reset();
@@ -123,6 +124,36 @@ internal static class OptionalSignalsProgram
             "More than 64 associated signals are retained through the actual adapter");
         OptionalSignalTelemetry.Reset();
         Check(OptionalSignalTelemetry.UpcomingSignals.Count == 0 && OptionalSignalTelemetry.GetTrackReservation(track) == "", "Reset retires signal and transferred reservation collections");
+    }
+
+    private static void UnplacedControllerKinds()
+    {
+        Prepare();
+        var track = new RailTrack();
+        var manager = new SignalManager
+        {
+            AllControllers = new object[]
+            {
+                Controller(track, "retained mainline"),
+                new Signals.Game.Controllers.BufferStopSignalController { Id = "buffer 1" },
+                new Signals.Game.Controllers.BufferStopSignalController { Id = "buffer 2" },
+                Controller(null, "unknown placement"),
+                new OtherOptionalMod.BufferStopSignalController { Id = "same short name" }
+            }
+        };
+        Activate(manager);
+        Complete(Route(track), 14);
+        var diagnostic = OptionalSignalTelemetry.Diagnostics.Single();
+        Check(diagnostic.StartsWith("4 observed signal controllers lack an exact native track placement"),
+            "All unplaced kinds remain counted in the coverage limitation");
+        Check(diagnostic.Contains("terminal buffer lamps [Signals.Game.Controllers.BufferStopSignalController]: 2"),
+            "Exact installed controller type identifies terminal buffer lamps without calling them mainline signals");
+        Check(diagnostic.Contains("Signals.Game.Controller: 1") && diagnostic.Contains("OtherOptionalMod.BufferStopSignalController: 1"),
+            "Unknown types report actual full names and counts; matching short names cannot claim buffer-lamp semantics");
+        Check(!OptionalSignalTelemetry.IsComplete && diagnostic.Contains("not assigned to route (coverage uncertain)"),
+            "Classifying terminal lamps does not hide uncertain route membership or claim complete coverage");
+        Check(OptionalSignalTelemetry.UpcomingSignals.Count == 1 && OptionalSignalTelemetry.UpcomingSignals[0].Name == "retained mainline",
+            "Unplaced controller classification preserves every correctly placed mainline observation");
     }
 
     private static void SourceLifetimeAndCancellation()

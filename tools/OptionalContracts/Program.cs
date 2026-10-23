@@ -59,6 +59,20 @@ var contracts = new Contract[]
     new("../DerailValley_Data/Managed/DV.SignPlacer.dll", "DV.Signs.SignDebug", "field", "text", IsStatic: false),
     new("../DerailValley_Data/Managed/DV.SignPlacer.dll", "DV.Signs.SignGeneratorData", "field", "signParameters", IsStatic: false),
     new("../DerailValley_Data/Managed/DV.Utils.dll", "DV.Utils.SingletonBehaviour`1", "field", "_instance", IsStatic: true, IsPublic: false),
+    // DoubleTrack replaces the native placer; these are optional exact-placement contracts.
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer", "method", "PlaceSign", 1, false, false),
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer", "method", "GetTrackSigns", 2, false, false),
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer", "method", "GetJunctionSigns", 1, false, false),
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer", "method", "ShouldIncludeTrack", 1, true, false),
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer+SignData", "method", "GetTrack", 0, false),
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer+SignData", "method", "GetPosition", 0, false),
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer+SignData", "method", "GetRotation", 0, false),
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer+SignData", "method", "GetSign", 0, false),
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer+SignData", "field", "flip", IsStatic: false, IsPublic: false),
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer", "field", "sideways", IsStatic: false),
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer", "field", "placeTrackSigns", IsStatic: false),
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer", "field", "placeJunctionSigns", IsStatic: false),
+    new("DoubleTrack/DoubleTrack.dll", "DV.Signs.CustomSignPlacer", "field", "noSignsTrackNameMarks", IsStatic: false),
 };
 var results = new List<object>();
 var sources = new List<object>();

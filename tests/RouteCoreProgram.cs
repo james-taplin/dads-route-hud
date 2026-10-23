@@ -39,6 +39,7 @@ internal static class RouteCoreProgram
         FittedRouteGraph();
         ReadableNames();
         CompactListText();
+        CompleteScrollingList();
         SwitchSides();
         StickyDirection();
         GroupedMetricColumns();
@@ -50,21 +51,86 @@ internal static class RouteCoreProgram
     {
         var track = new RouteEvent("track", 0, RouteEventKind.Track, "Goods Factory · B yard, track 5, loading",
             code: "GF-B-5-L", fact: "AI reserved");
-        Check(RouteListText.Description(track) == "GF-B-5-L  <color=#FFBD59>[AI reserved]</color>", "Compact track code and reservation match the old driving list");
+        Check(RouteListText.Description(track) == "<color=#7EDDE8><b>Goods Factory · B yard, track 5, loading</b></color>\n<color=#FFBD59>AI reserved</color>",
+            "Station track uses its readable name in bold colour and puts reservation on a separate line");
         var sign = new RouteEvent("sign", 100, RouteEventKind.Speed, "60 km/h", fact: "Native recipe; prefab: long-internal-name");
-        Check(RouteListText.Description(sign) == "60 km/h" && sign.Fact.Contains("prefab"), "Sign source diagnostics stay retained without filling the driving row");
+        Check(RouteListText.Description(sign) == "<color=#FFD166><b>Speed limit 60 km/h</b></color>" && sign.Fact.Contains("prefab"),
+            "Speed limit is explicit, bold and coloured; source diagnostics remain in the inspector");
         var signal = new RouteEvent("signal", 200, RouteEventKind.Signal, "<Signal>", "Clear", "00FF00", "Block occupied");
-        Check(RouteListText.Description(signal) == "<color=#00FF00>‹Signal›</color>  Clear  <color=#FFBD59>[Block occupied]</color>", "Signal names have aspect colour and separate reservation facts; native markup is escaped");
+        Check(RouteListText.Description(signal) == "<color=#00FF00><b>Signal ‹Signal› · Clear</b></color>\n<color=#FFBD59>Block occupied</color>",
+            "Signal name and aspect are bold with native aspect colour; markup is escaped and facts separated");
         Check(RouteListText.Description(new RouteEvent("bad", 0, RouteEventKind.Signal, "S", colorHex: "red>bad"))
-            == "<color=#C0C0C0>S</color>", "Invalid native colour cannot become GUI markup");
+            == "<color=#C0C0C0><b>Signal S</b></color>", "Invalid native colour cannot become GUI markup");
         Check(RouteListText.Description(new RouteEvent("switch", 50, RouteEventKind.Junction, "Switch", marker: ">>>"))
-            == ">>>  Switch", "Approach marker survives inside the compact description");
+            == "<color=#D7B1FF><b>→ Switch</b></color>", "Junction has a clear direction cue and bold colour");
         Check(RouteListText.Description(new RouteEvent("track", 0, RouteEventKind.Track, "Main line", code: "#Y-#S-917-#T"))
-            == "Main line", "Placeholder track code is not reintroduced by the compact row");
-        Check(RouteNaming.TrackNameFromParts("#Y", "#S", "917#T", "", "track_917") == "track_917",
-            "Native placeholder parts fall back to the actual track name");
-        Check(RouteNaming.TrackNameFromParts("#Y", "#S", "#T", "", null) == "Unnamed track",
-            "Placeholder parts without a fallback stay unnamed");
+            == "<color=#7EDDE8><b>Main line</b></color>", "Placeholder source ID stays out of the driving list");
+        Check(RouteListText.Description(new RouteEvent("grade", 40, RouteEventKind.Grade, "+1.4 % climbing"))
+            == "<color=#9DDB96><b>Grade +1.4 % climbing</b></color>", "Grade has explicit signed wording and a distinct bold colour");
+        Check(RouteListText.Description(new RouteEvent("speed", 20, RouteEventKind.Speed, "Speed limit dual · 4/6"))
+            == "<color=#FFD166><b>Speed limit dual · 4/6</b></color>", "An already named native speed sign gets no duplicate prefix");
+        Check(RouteListText.Description(new RouteEvent("opposite", 20, RouteEventKind.Grade, "level", appliesToTravel: false))
+            .EndsWith("\n<color=#BFC6CE>Opposite direction</color>"), "An explicitly shown opposing observation is labelled");
+        Check(RouteListText.CoverageWarning("Observed native signs; coverage partial").Contains("speed limits or grades may be missing")
+            && RouteListText.CoverageWarning("Native placement unavailable").Length > 0,
+            "Incomplete source coverage warns that apparent gaps can omit speed limits and grades");
+        Check(RouteListText.CoverageWarning("Observed native signs; 0 unmatched plans").Length == 0,
+            "A successful source report is not falsely marked partial");
+        Check(RouteListText.SignalCoverageWarning("Optional signals partial (100 diagnostics)").Contains("Signal coverage incomplete")
+            && RouteListText.SignalCoverageWarning("DVSignals not active; optional facts unavailable").Contains("Signal coverage unavailable")
+            && RouteListText.SignalCoverageWarning("Optional signal data not sampled").Length > 0,
+            "Missing or partial signal placements get a separate explicit coverage warning");
+        Check(RouteListText.SignalCoverageWarning("Signal placements read; aspect update age unverified").Length == 0,
+            "Unverified aspect age alone does not claim missing signal placements");
+        Check(RouteListText.Termination(RouteWalkTermination.EndOfTrack) == "end of selected route"
+            && RouteListText.Termination(RouteWalkTermination.LoopClosed) == "route loops here"
+            && RouteListText.Termination(RouteWalkTermination.HorizonReached) == "end of captured range",
+            "Shorter mapped routes state why mapping ended");
+        var longLabel = "Junction · selected towards " + new string('x', 12000) + " · alternative towards Harbour";
+        Check(RouteListText.Description(new RouteEvent("long", 20, RouteEventKind.Junction, longLabel)).Contains(longLabel),
+            "Long route descriptions retain their complete text for wrapping");
+        Check(RouteListText.SameDescription(sign, new RouteEvent(sign.Id, 90, sign.Kind, sign.Label,
+                fact: "different inspector-only provenance", freshness: "later")),
+            "Moving distances and sign provenance reuse the existing formatted description and measured height");
+        Check(!RouteListText.SameDescription(signal, new RouteEvent(signal.Id, 190, signal.Kind,
+                signal.Label, "Stop", "FF0000", signal.Fact))
+            && !RouteListText.SameDescription(track, new RouteEvent(track.Id, 0, track.Kind,
+                track.Label, fact: "Occupied")),
+            "A signal aspect or track reservation change invalidates the cached driving description");
+        Check(!RouteListText.SameDescription(sign, new RouteEvent(sign.Id, 90, sign.Kind, sign.Label, appliesToTravel: false)),
+            "A direction change invalidates the cached opposing-direction label");
+    }
+
+    private static void CompleteScrollingList()
+    {
+        var heights = Enumerable.Range(0, 50001).Select(index => 18f + index % 3 * 7).ToArray();
+        var layout = new RouteListLayout(heights);
+        Check(layout.Count == heights.Length && layout.Height == heights.Sum(),
+            "More than fifty thousand rows retain their full scroll extent without a page cap");
+        var last = layout.VisibleRows(layout.Top(50000) + 1, layout.Height);
+        Check(last.first == 50000 && last.count == 1,
+            "The final event remains directly reachable at the end of a large list");
+        var middle = layout.VisibleRows(layout.Top(23456) + 1, layout.Top(23461) - 1);
+        Check(middle.first == 23456 && middle.count == 5,
+            "A viewport paints every intersecting variable-height row without the rest of the catalogue");
+        var above = layout.VisibleRows(-200, -1);
+        var below = layout.VisibleRows(layout.Height + 1, layout.Height + 300);
+        Check(above.count == 0 && below.count == 0,
+            "Content above or below the list does not require row painting");
+        var empty = new RouteListLayout(Array.Empty<float>());
+        Check(empty.Height == 0 && empty.VisibleRows(0, 100).count == 0,
+            "An empty route needs no painted rows or fake content height");
+        var variable = new RouteListLayout(new[] { 18f, 300f, 36f });
+        Check(variable.VisibleRows(20, 290) == (1, 1) && variable.VisibleRows(310, 340) == (1, 2),
+            "A long wrapped description stays visible across viewport boundaries with its following event");
+        var seen = new HashSet<int>();
+        for (var top = 0f; top <= layout.Height; top += 500)
+        {
+            var rows = layout.VisibleRows(top, top + 500);
+            for (var row = rows.first; row < rows.first + rows.count; row++) seen.Add(row);
+        }
+        Check(seen.Count == heights.Length && seen.Min() == 0 && seen.Max() == heights.Length - 1,
+            "Scrolling through the entire large list exposes every event exactly by source index");
     }
 
     /// <summary>Readable names come from the game's own identifier parts, never a hardcoded yard list.</summary>

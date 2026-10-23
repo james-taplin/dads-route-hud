@@ -1,6 +1,6 @@
 # Project context
 
-Dad's Route HUD 0.5.1 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
+Dad's Route HUD 0.5.2 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
 
 The public source branch starts at original MIT revision 9acf926a2d7c8512ddb85cbf637b3e4a9bfa6f6f and imports the current fork source in one commit. The local development lineage includes Koteq b09fe942ab5118e6aa348a153f686a537a483d0d and Dad's Driving HUD. Koteq's compatibility contributions are retained and credited, but its old committed game DLLs are excluded by not importing that commit's history. QuantitiesNet is pinned at 2b6522cb70df8108af0d96dec6ebdc6c35a673aa. See LICENSING.md and CREDITS.md.
 
@@ -32,6 +32,26 @@ for such leaves without depending on Passenger Jobs. Car-list row sampling now c
 clears stale rows at the next Layout, deduplicates warnings and retries at the saved cadence (at least
 0.25 seconds after a failure). Other Update consumers can continue. Native route direction matches the
 game's Bogie transitions; no graph workaround is justified by this fault. Game acceptance remains pending.
+
+Version 0.5.2 keeps two route-list columns but uses full station/track names, bold type colours and
+wrapped descriptions. The main list has no paging or count cap: one full-height scroll extent and
+binary viewport lookup paint only visible rows. Moving snapshots reuse formatted descriptions and
+measured heights. Opposing/filter counts, mapped extent and source-coverage warnings remain visible.
+The complete inspector retains its separate pagination and original source identifiers.
+
+NativeJunctionNames maps each junction branch through directed native potential connections to the
+first stations on its paths. Junction has no native destination-name field; this incremental cached
+lookup is the confirmed gap filled by the helper. Work is limited to 24 tracks / 0.5 ms per Update;
+unresolved or bounded results are explicit. Branch indices never imply left/right. Destination work
+does not cap route collection or depend on optional mods. Native station names replace the need for
+a manually maintained station alias table.
+
+DoubleTrack 2.1.1 replaces the native sign placer with CustomSignPlacer. Version 0.5.2 observes that
+optional placer's exact track/anchor/direction metadata and validates its read-only recipes for late
+enablement. Captured anchors survive later Toolbox clearance moves of the visible poles. No nearest
+track guessing or static DoubleTrack dependency is introduced. The known unplaced signal-controller
+population includes terminal buffer lamps with no native placement; their source limitation remains
+explicit rather than fabricating positions.
 
 
 ## Track-ahead clarity update

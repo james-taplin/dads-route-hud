@@ -1,9 +1,9 @@
 # Development status
 
-Latest test installation, 23 October 2026: 0.5.1 is installed with current Settings.xml preserved
-byte-for-byte, this HUD's cache cleared, Route HUD enabled and Driving HUD disabled. It addresses
-a confirmed 0.5.0 freeze: passenger-job task traversal errors escaped CarList.Update and prevented
-route collection. See the final sections for evidence, validation and the installation receipt.
+Latest test installation, 23 October 2026: 0.5.2 is installed for James's readable-list, missing
+speed/grade and junction destination request on codex/readable-route-events, based on checkpoint
+51d5dc6. Current settings/UMM flags are preserved and the HUD shadow cache is cleared. See the final
+0.5.2 sections for evidence, validation and the installation receipt; older entries are historical.
 
 The 0.5.0 refactor was developed on codex/route-hud-refactor from the completed 0.4.2 checkpoint
 bb92b42, then installed at James's request. Older candidate status and acceptance notes below
@@ -577,3 +577,69 @@ remain. James launches the next game test and UMM must regenerate its 0.5.1 cach
 
 The game was not launched and runtime acceptance remains pending. The validated ZIP is unchanged
 by this post-installation source handover entry; its bundled handover records the build state.
+
+## 0.5.2 readable route events and source coverage - 23 October 2026
+
+James's 20:58 screenshot shows 27 displayed / 32 retained events on page 1/1, with a 63 m-1.9 km
+gap and unreadable structural track/junction names. Installed filters show every event category;
+opposing observations are hidden. Thus a page-size cap does not explain that screenshot's gap.
+The current 0.5.1 game log has no HUD OnUpdate exceptions or car-list sampling warnings, unlike
+the previous 0.5.0 failure. The old freeze is separate from the sign coverage defect below.
+
+Confirmed sign source gap: installed DoubleTrack 2.1.1 replaces DV.Signs.SignPlacer with its own
+CustomSignPlacer. Its private PlaceSign does not call the native method watched by the HUD, and the
+late-enable fallback previously looked only for native placer components. This omitted the exact
+DoubleTrack speed/grade placements. Version 0.5.2 adds an optional checked reflection observer and
+read-only recipe matching for that actual implementation. It keeps native support and no static
+DoubleTrack reference. Captured track anchors now remain independent of later visible-pole moves;
+the installed Toolbox performs clearance adjustments of several metres, which could otherwise
+make an already known sign fail the one-metre track projection check. Unknown late-enable matches
+still remain partial instead of being assigned to nearby parallel rails.
+
+The compact two-column list now uses human labels with bold type colours, wrapped descriptions and
+separate reservation notes. Native station/yard parts give station track names; structural source
+labels become plain track descriptions, while raw identifiers stay in the complete inspector.
+The driving list has no paging or row cap. One full scroll extent and a binary viewport lookup
+paint visible rows only; formatted descriptions and Unity-measured heights are reused across moving
+snapshots. Caches retain one generation. Opposing/type-filter counts, mapped extent/termination and
+independent sign/signal coverage warnings are always shown in list mode. Inspector paging remains.
+
+Native Junction has connection data but no destination-name field. NativeJunctionNames therefore
+maps each branch through native directed potential connections to the first station on each path,
+using actual StationController names rather than guessed nearest stations or a manual alias table.
+It shows the selected station destination and other branch options; left/right still comes only
+from native geometry. Work advances outside IMGUI with a cooperative 24-track / 0.5 ms Update budget.
+The 50 km/4096-directed-track destination search bounds report unknown/partial alternatives and do
+not cap route-event collection. Visited-track geometry subscriptions invalidate off-route caches;
+Reset unsubscribes them. Station-name lookup does not cache temporary empty/partial catalogue misses.
+
+Signal limitation: the log records DVSignals creating exactly 100 buffer-stop lamp controllers,
+matching the previous unplaced-controller diagnostic. BufferStopSignalController deliberately
+passes null placement; native BufferStop has no universal track/span/direction association, and
+DVSignals/AI Traffic's placement-based lookups skip those controllers too. The diagnostic now counts
+full controller types and explicitly names terminal buffer lamps, retaining all missing counts and
+partial coverage. No guessed buffer-lamp placement is added; source completeness is not claimed.
+
+Three agents implemented and independently cross-reviewed the source/list/native naming changes.
+The complete validation passed with zero-warning game-reference builds, 679 checks across nine
+suites, 64/64 metadata contracts, the 14-file artifact audit and 12 isolated installer assertions.
+The final literal DoubleTrack label cleanup adds one focused naming regression (680 checks total),
+with affected suites and package audits repeated afterward. The DLL remains about 196 KiB with
+no new runtime dependencies. Actual installation is recorded separately below once complete.
+James launches the game. Native visual, physical-board comparison and real frame timing still need
+the next drive; source-boundary tests cannot establish those observations.
+
+## 0.5.2 installed for James's retest - 23 October 2026
+
+Installed with the game closed; all 14 files match the audited package and assembly version is
+0.5.2.0. Package SHA256: 9C9CF0E66C0B3FE189344487DE51FE0B32152885DF26565D51E36CF0303B4627.
+DLL SHA256: 2D870B7A56E9103EA04404AACD01CFBF28C7B1F8C5464656A6B04D5BBA5AB8B5 (200,704 bytes).
+Verified full prior installation/cache and UMM Params.xml backup with installation-receipt.json:
+artifacts/backups/upgrade-0.5.2-6fc114a301904495b90dda93ab30e13e/.
+
+Current Settings.xml remains byte-identical, SHA256
+1CA78CE317D97EAE86976B72C0333DC98DAE3E3F41DCAFB0384F6104FB1C5A9D. Params.xml is also byte-identical:
+Route HUD was already enabled and Driving HUD disabled, and both flags remain as requested.
+Only backed-up DadsRouteHUD.dll.*.cache files were removed; none remain until UMM regenerates one.
+The game was not launched. The audited ZIP is unchanged by this post-installation source record;
+its bundled handover records the earlier build state. No push or release was made.

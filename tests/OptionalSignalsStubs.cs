@@ -85,7 +85,7 @@ namespace Signals.Game
         public double Span { get; set; }
         public double Direction { get; set; } = 1;
     }
-    public sealed class Controller
+    public class Controller
     {
         public string Id { get; set; } = "controller";
         public bool Exists { get; set; } = true;
@@ -112,6 +112,14 @@ namespace Signals.Game
     }
     public sealed class Definition { public IEnumerable OnLights { get; set; } = new[] { new Lamp() }; }
     public sealed class Lamp { public UnityEngine.Color Colour { get; set; } = new UnityEngine.Color { g = 1 }; }
+}
+namespace Signals.Game.Controllers
+{
+    public sealed class BufferStopSignalController : Signals.Game.Controller { }
+}
+namespace OtherOptionalMod
+{
+    public sealed class BufferStopSignalController : Signals.Game.Controller { }
 }
 namespace Signals.Game.Railway
 {

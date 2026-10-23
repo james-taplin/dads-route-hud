@@ -69,8 +69,7 @@ namespace DvMod.HeadsUpDisplay
 
             if (head.Length == 0 && detail.Length == 0)
             {
-                var name = Trim(fallback);
-                return name.Length > 0 ? name : "Unnamed track";
+                return FallbackTrackName(fallback);
             }
             if (head.Length == 0) return Capitalise(detail.ToString());
             return detail.Length == 0 ? head : head + " · " + detail;
@@ -97,10 +96,56 @@ namespace DvMod.HeadsUpDisplay
             // DV uses literal #Y/#S/#T placeholders outside real yards. A numeric portion
             // alongside those placeholders does not establish a station or a yard track.
             if (Trim(yardId).Contains("#") || Trim(subYardPart).Contains("#") || Trim(trackPart).Contains("#"))
-                return Trim(fallback).Length > 0 ? Trim(fallback) : "Unnamed track";
+                return FallbackTrackName(fallback);
             SplitTrackPart(trackPart, out var orderNumber, out var trackType);
             return TrackName(yardId, subYardPart, orderNumber, trackType, stationName, fallback);
         }
+
+        /// <summary>Native structural object names are implementation labels, not station names.</summary>
+        public static string FallbackTrackName(string? fallback)
+        {
+            var text = Trim(fallback);
+            if (text.StartsWith("[track diverging]", StringComparison.OrdinalIgnoreCase)) return "Diverging track";
+            if (text.StartsWith("[track through]", StringComparison.OrdinalIgnoreCase)) return "Through track";
+            if (text.StartsWith("[#]", StringComparison.Ordinal)) return "Main line";
+            // Remove the provider prefix, retaining custom tokens without guessing their meaning.
+            if (text.StartsWith("doubletrack-", StringComparison.OrdinalIgnoreCase))
+                return text.Substring("doubletrack-".Length).Replace('-', ' ');
+            return text.Length > 0 ? text : "Unnamed track";
+        }
+
+        /// <summary>
+        /// Names native switch branches by their connected station destinations. Branch numbers
+        /// remain the fallback when destinations are not yet established; their order never implies
+        /// left or right. Callers supply actual graph results rather than nearby station guesses.
+        /// </summary>
+        public static string JunctionDestinations(string? stationName, int selectedBranch,
+            string[] branchDestinations, bool trailing, bool setForRoute, string? onwardDestination,
+            RouteTurnDirection turn)
+        {
+            var station = Trim(stationName);
+            var head = station.Length > 0 ? station + " junction" : "Junction";
+            if (trailing)
+                return head + " · trailing, " + (setForRoute ? "set for your route" : "set against you")
+                    + " · onward towards " + Destination(onwardDestination);
+            var text = new StringBuilder(head);
+            if (selectedBranch >= 0 && selectedBranch < branchDestinations.Length)
+            {
+                text.Append(" · set towards ").Append(Destination(branchDestinations[selectedBranch]));
+                var direction = RouteTurn.Word(turn);
+                if (direction.Length > 0) text.Append(" (").Append(direction).Append(')');
+            }
+            else text.Append(" · selected branch unavailable");
+            for (var branch = 0; branch < branchDestinations.Length; branch++)
+            {
+                if (branch == selectedBranch) continue;
+                text.Append(" · branch ").Append((branch + 1).ToString(CultureInfo.InvariantCulture))
+                    .Append(" towards ").Append(Destination(branchDestinations[branch]));
+            }
+            return text.ToString();
+        }
+
+        private static string Destination(string? value) => Trim(value).Length > 0 ? Trim(value) : "destination unknown";
 
         /// <summary>
         /// Describes a switch as "Goods Factory switch · branch 2 of 3". Branch numbers are

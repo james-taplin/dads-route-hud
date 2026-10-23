@@ -188,7 +188,14 @@ namespace DvMod.HeadsUpDisplay
                 if (Read(controller, "Exists") is bool exists && !exists) continue;
                 var placement = Read(controller, "PlacementInfo");
                 var track = Read(placement, "Track") as RailTrack;
-                if (track == null) { result.UnassociatedControllers++; continue; }
+                if (track == null)
+                {
+                    result.UnassociatedControllers++;
+                    var type = controller.GetType().FullName ?? controller.GetType().Name;
+                    result.UnassociatedKinds.TryGetValue(type, out var count);
+                    result.UnassociatedKinds[type] = count + 1;
+                    continue;
+                }
                 if (!byTrack.TryGetValue(track, out var candidates)) continue;
                 if (!TryDouble(Read(placement, "Span"), out var nativeSpan)
                     || !TryDouble(Read(placement, "Direction"), out var direction) || (direction != 0 && direction != 1))
@@ -222,8 +229,21 @@ namespace DvMod.HeadsUpDisplay
                 }
             }
             if (result.UnassociatedControllers > 0)
+            {
+                var kinds = new List<string>();
+                foreach (var kind in result.UnassociatedKinds)
+                {
+                    // Installed DVSignals deliberately gives buffer-stop lamps no placement.
+                    // Identify that exact supported type; neither names nor counts establish
+                    // route membership, so these remain part of the coverage limitation.
+                    var description = kind.Key == "Signals.Game.Controllers.BufferStopSignalController"
+                        ? "terminal buffer lamps [" + kind.Key + "]" : kind.Key;
+                    kinds.Add(description + ": " + kind.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                }
                 result.Problems.Add(result.UnassociatedControllers
-                    + " observed signal controllers lack an exact native track placement; not assigned to route (coverage uncertain)");
+                    + " observed signal controllers lack an exact native track placement; "
+                    + string.Join("; ", kinds) + "; not assigned to route (coverage uncertain)");
+            }
         }
 
         private static IEnumerable<int> ReadSignal(object controller, object signal, double distance, string sourceId, bool facingTravel, ReadPass result)
@@ -419,6 +439,7 @@ namespace DvMod.HeadsUpDisplay
             public readonly List<string> Problems = new List<string>();
             public int Steps;
             public int UnassociatedControllers;
+            public readonly SortedDictionary<string, int> UnassociatedKinds = new SortedDictionary<string, int>(StringComparer.Ordinal);
         }
         private sealed class ReferenceComparer : IEqualityComparer<object>
         {

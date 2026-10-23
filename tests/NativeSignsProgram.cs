@@ -37,6 +37,7 @@ internal static class NativeSignsProgram
     {
         NativeRouteSignIndex.Reset();
         UnityEngine.Object.ClearScene();
+        UnityModManagerNet.UnityModManager.DoubleTrack = null;
         Time.realtimeSinceStartup = 1;
         WorldMover.currentMove = default;
     }
@@ -46,8 +47,113 @@ internal static class NativeSignsProgram
         PrecedenceAndAmbiguity();
         RecipeSignatureAndCache();
         RejectedRecipeAndProjection();
+        DoubleTrackPlacementAndLateEnable();
         NativeRouteSignIndex.Reset();
         Console.WriteLine(checks + " actual native-sign index checks passed (reflection/Unity/native boundary doubles; not game acceptance).");
+    }
+
+    private static void DoubleTrackPlacementAndLateEnable()
+    {
+        Prepare();
+        var patch = typeof(NativeRouteSignIndex).GetNestedType("ObserveDoubleTrackPlacement", BindingFlags.NonPublic)!;
+        var prepare = patch.GetMethod("Prepare", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var target = patch.GetMethod("TargetMethod", BindingFlags.NonPublic | BindingFlags.Static)!;
+        var postfix = patch.GetMethod("Postfix", BindingFlags.NonPublic | BindingFlags.Static)!;
+        Check(!(bool)prepare.Invoke(null, null)!, "Absent optional DoubleTrack does not request a Harmony target");
+        UnityModManagerNet.UnityModManager.DoubleTrack = new UnityModManagerNet.UnityModManager.ModEntry
+        { Loaded = true, Active = false, Assembly = typeof(CustomSignPlacer).Assembly };
+        Check(!(bool)prepare.Invoke(null, null)!, "Inactive optional DoubleTrack is not bound");
+        UnityModManagerNet.UnityModManager.DoubleTrack.Active = true;
+        Check((bool)prepare.Invoke(null, null)!, "Active DoubleTrack's separate native-shaped placement contract is validated");
+        var method = (MethodBase)target.Invoke(null, null)!;
+        Check(method.DeclaringType == typeof(CustomSignPlacer) && method.Name == "PlaceSign", "Observer targets DoubleTrack's actual private placer instead of base-game PlaceSign");
+
+        var track = Track("DoubleTrack road");
+        var parallel = Track("Parallel road");
+        var placer = new GameObject("DoubleTrack placer").Add(new CustomSignPlacer());
+        var parts = new[] { Part(SignType.SpeedLimit, "8"), Part(SignType.Grade, "-1.5") };
+        var root = Root(new Vector3(100, 0, -2), parts);
+        var data = placer.AddPlan(track, new Vector3(100, 0, 0), false, parts);
+        postfix.Invoke(null, new[] { (object)placer, data, root });
+        var entries = NativeRouteSignIndex.EnsureTrack(track);
+        Check(entries.Count == 2 && entries.Any(e => e.Kind == RouteEventKind.Speed && e.Label == "80 km/h")
+            && entries.Any(e => e.Kind == RouteEventKind.Grade && e.Label == "-1.5 % falling"),
+            "Actual DoubleTrack placement retains posted speed and signed grade parts");
+        Check(entries.All(e => e.Forward && e.Span == 100) && NativeRouteSignIndex.EnsureTrack(parallel).Count == 0,
+            "DoubleTrack's exact recipe track and direction cannot leak to a parallel road");
+        var calls = placer.RecipeCalls;
+        root.transform.position += new Vector3(0, 0, -4);
+        track.Regenerate();
+        entries = NativeRouteSignIndex.EnsureTrack(track);
+        Check(entries.Count == 2 && entries.All(e => e.Span == 100),
+            "Post-placement sign-clearance movement preserves the native track anchor rather than projecting the displaced pole");
+        WorldMover.currentMove = new Vector3(1000, 0, 500);
+        root.transform.position += WorldMover.currentMove;
+        track.Regenerate();
+        Check(NativeRouteSignIndex.EnsureTrack(track).All(e => e.Span == 100), "DoubleTrack's retained anchor follows only world-origin changes");
+        Check(placer.RecipeCalls == calls && placer.PlacementCalls == 0, "Already captured DoubleTrack roots need no recipe calls or gameplay mutation");
+
+        Prepare();
+        UnityModManagerNet.UnityModManager.DoubleTrack = new UnityModManagerNet.UnityModManager.ModEntry
+        { Loaded = true, Active = true, Assembly = typeof(CustomSignPlacer).Assembly };
+        track = Track("Late DoubleTrack road");
+        placer = new GameObject("Late DoubleTrack placer").Add(new CustomSignPlacer { sideways = 2 });
+        var prefab = new GameObject("Native speed prefab");
+        parts = new[] { Part(SignType.SpeedLimit, "6", prefab), Part(SignType.Grade, "+2", new GameObject("Native grade prefab")) };
+        Root(new Vector3(250, 0, 0), parts);
+        placer.AddPlan(track, new Vector3(252, 0, 0), true, parts);
+        entries = NativeRouteSignIndex.EnsureTrack(track);
+        Check(entries.Count == 2 && entries.All(e => e.Span == 252 && !e.Forward),
+            "Late-enabled DoubleTrack uses its own read-only recipes and exact root signature to recover direction and track anchor");
+        Check(entries.All(e => e.Fact.Contains("Native recipe matched to observed sign")) && placer.PlacementCalls == 0,
+            "DoubleTrack late bootstrap reports validated evidence and never invokes sign creation");
+        Check(placer.RecipeCalls == 2 && NativeRouteSignIndex.Coverage.Contains("1 validated plan matches"),
+            "Both DoubleTrack recipe directions are enumerated once and coverage counts actual matches");
+        calls = placer.RecipeCalls;
+        Time.realtimeSinceStartup += 6;
+        NativeRouteSignIndex.EnsureTrack(track);
+        Check(placer.RecipeCalls == calls, "Unchanged optional source skips periodic recipe reconstruction");
+
+        var manyParts = Enumerable.Range(0, 150).Select(i => Part(i % 2 == 0 ? SignType.SpeedLimit : SignType.Grade,
+            i % 2 == 0 ? "8" : "+1.5")).ToArray();
+        var manyRoot = Root(new Vector3(500, 0, 0), manyParts);
+        var manyData = placer.AddPlan(track, new Vector3(500, 0, 0), false, manyParts);
+        postfix.Invoke(null, new[] { (object)placer, manyData, manyRoot });
+        entries = NativeRouteSignIndex.EnsureTrack(track);
+        Check(entries.Count == 152 && entries.Select(e => e.SourceId).Distinct().Count() == 152,
+            "DoubleTrack speed and grade parts retain every distinct observation beyond ordinary list limits");
+
+        Prepare();
+        UnityModManagerNet.UnityModManager.DoubleTrack = new UnityModManagerNet.UnityModManager.ModEntry
+        { Loaded = true, Active = true, Assembly = typeof(CustomSignPlacer).Assembly };
+        track = Track("Excluded DoubleTrack road");
+        placer = new GameObject("Filtered DoubleTrack placer").Add(new CustomSignPlacer());
+        placer.noSignsTrackNameMarks.Add("Excluded");
+        Root(new Vector3(50, 0, 0), parts);
+        placer.AddPlan(track, new Vector3(50, 0, 0), false, parts);
+        Check(NativeRouteSignIndex.EnsureTrack(track).Count == 0, "Optional placer exclusion configuration is honoured during read-only bootstrap");
+
+        Prepare();
+        UnityModManagerNet.UnityModManager.DoubleTrack = new UnityModManagerNet.UnityModManager.ModEntry
+        { Loaded = true, Active = true, Assembly = typeof(CustomSignPlacer).Assembly };
+        track = Track("Ambiguous DoubleTrack road");
+        placer = new GameObject("Ambiguous DoubleTrack placer").Add(new CustomSignPlacer());
+        Root(new Vector3(50, 0, 0), parts); Root(new Vector3(50, 0, 0), parts);
+        placer.AddPlan(track, new Vector3(50, 0, 0), false, parts);
+        Check(NativeRouteSignIndex.EnsureTrack(track).Count == 0 && NativeRouteSignIndex.Diagnostics.Any(d => d.Contains("Ambiguous native sign recipe")),
+            "Ambiguous optional sign roots remain explicit incomplete coverage rather than guessed events");
+
+        Prepare();
+        track = Track("Delayed optional source");
+        placer = new GameObject("Delayed DoubleTrack placer").Add(new CustomSignPlacer());
+        Root(new Vector3(50, 0, 0), parts);
+        placer.AddPlan(track, new Vector3(50, 0, 0), false, parts);
+        Check(NativeRouteSignIndex.EnsureTrack(track).Count == 0, "Observed optional roots alone never establish a guessed track association");
+        UnityModManagerNet.UnityModManager.DoubleTrack = new UnityModManagerNet.UnityModManager.ModEntry
+        { Loaded = true, Active = true, Assembly = typeof(CustomSignPlacer).Assembly };
+        Time.realtimeSinceStartup += 6;
+        Check(NativeRouteSignIndex.EnsureTrack(track).Count == 2,
+            "A newly available exact optional placer retries bootstrap even when observed sign roots did not change");
     }
 
     private static void CapturedMembershipAndParts()

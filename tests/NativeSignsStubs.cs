@@ -7,7 +7,7 @@ using System.Linq;
 
 namespace HarmonyLib
 {
-    [AttributeUsage(AttributeTargets.Class)] public sealed class HarmonyPatch : Attribute { public HarmonyPatch(Type type, string method) { } }
+    [AttributeUsage(AttributeTargets.Class)] public sealed class HarmonyPatch : Attribute { public HarmonyPatch() { } public HarmonyPatch(Type type, string method) { } }
     [AttributeUsage(AttributeTargets.Method)] public sealed class HarmonyPostfix : Attribute { }
     [AttributeUsage(AttributeTargets.Method)] public sealed class HarmonyPriority : Attribute { public HarmonyPriority(int priority) { } }
     public static class Priority { public const int Last = 0; }
@@ -24,6 +24,7 @@ namespace UnityEngine
         public string name = "Test object";
         public int GetInstanceID() => id;
         public static T[] FindObjectsOfType<T>() where T : Object => scene.OfType<T>().Where(value => value != null).ToArray();
+        public static Object[] FindObjectsOfType(Type type) => scene.Where(value => type.IsInstanceOfType(value) && value != null).ToArray();
         public static void ClearScene() => scene.Clear();
         public static bool operator ==(Object? a, Object? b)
         {
@@ -83,6 +84,19 @@ namespace UnityEngine
     }
     public static class Mathf { public static int FloorToInt(float value) => (int)Math.Floor(value); }
     public static class Time { public static float realtimeSinceStartup; }
+}
+namespace UnityModManagerNet
+{
+    public static class UnityModManager
+    {
+        public sealed class ModEntry
+        {
+            public bool Loaded, Active;
+            public System.Reflection.Assembly? Assembly;
+        }
+        public static ModEntry? DoubleTrack;
+        public static ModEntry? FindMod(string id) => id == "DoubleTrack" ? DoubleTrack : null;
+    }
 }
 public static class WorldMover { public static UnityEngine.Vector3 currentMove; }
 public sealed class RailTrack : UnityEngine.Component
@@ -157,6 +171,39 @@ namespace DV.Signs
             public bool FlippedForTest => flip;
             public RailTrack GetTrack() => track;
             public UnityEngine.Vector3 GetPosition() => position;
+            public UnityEngine.Quaternion GetRotation() => default;
+            public Sign GetSign() => sign;
+        }
+    }
+
+    // DoubleTrack 2.1.1 is a separate placer, not a SignPlacer subtype. Its private
+    // recipe uses native Sign/SignParameters and native SignGeneratorData roots.
+    public sealed class CustomSignPlacer : UnityEngine.Component
+    {
+        public bool placeTrackSigns = true, placeJunctionSigns;
+        public float sideways;
+        public List<string> noSignsTrackNameMarks = new List<string>();
+        private readonly List<SignData> plans = new List<SignData>();
+        public int RecipeCalls, PlacementCalls;
+        public object AddPlan(RailTrack track, UnityEngine.Vector3 anchor, bool flip, SignParameters[] parts)
+        { var data = new SignData(track, anchor, flip, parts); plans.Add(data); return data; }
+        private static bool ShouldIncludeTrack(RailTrack track) => track != null;
+        private IEnumerable GetTrackSigns(RailTrack track, bool reverse)
+        { RecipeCalls++; return plans.Where(data => data.GetTrack() == track && data.FlippedForTest == reverse).ToArray(); }
+        private IEnumerable GetJunctionSigns(Junction junction) => Array.Empty<object>();
+        private UnityEngine.GameObject PlaceSign(SignData data)
+        { PlacementCalls++; throw new InvalidOperationException("Read-only bootstrap must never create a sign"); }
+        private sealed class SignData
+        {
+            private readonly RailTrack track;
+            private readonly UnityEngine.Vector3 anchor;
+            private readonly bool flip;
+            private readonly Sign sign;
+            public SignData(RailTrack track, UnityEngine.Vector3 anchor, bool flip, SignParameters[] parts)
+            { this.track = track; this.anchor = anchor; this.flip = flip; sign = new Sign(parts); }
+            public bool FlippedForTest => flip;
+            public RailTrack GetTrack() => track;
+            public UnityEngine.Vector3 GetPosition() => anchor;
             public UnityEngine.Quaternion GetRotation() => default;
             public Sign GetSign() => sign;
         }

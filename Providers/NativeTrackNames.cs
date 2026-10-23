@@ -42,12 +42,14 @@ namespace DvMod.HeadsUpDisplay
         public static string StationName(string? yardId)
         {
             var yard = (yardId ?? "").Trim();
-            if (yard.Length == 0) return "";
+            if (yard.Length == 0 || yard.Contains("#")) return "";
             if (stationNames.TryGetValue(yard, out var cached)) return cached;
             var name = "";
-            var station = StationController.GetStationByYardID(yard);
+            var station = StationController.allStations == null ? null : StationController.GetStationByYardID(yard);
             if (station != null && station.stationInfo != null) name = station.stationInfo.Name ?? "";
-            stationNames[yard] = name;
+            // During a scene transition station instances can be temporarily unavailable.
+            // Do not permanently cache that transient absence as an unknown station.
+            if (!string.IsNullOrWhiteSpace(name)) stationNames[yard] = name;
             return name;
         }
 
