@@ -1,5 +1,10 @@
 # Development status
 
+Latest test installation, 23 October 2026: James requested and received 0.5.0 with his Settings.xml
+preserved byte-for-byte, the Route HUD shadow cache cleared, DadsRouteHUD enabled and DadsDrivingHUD
+disabled in UMM. See the installation follow-up at the end. Earlier pre-installation notes below
+describe the state before this explicit test-install request.
+
 Refactor candidate 0.5.0 is developed separately on codex/route-hud-refactor from the completed
 0.4.2 checkpoint bb92b42. It has not replaced the installed 0.4.2 candidate. See the final refactor
 section below; older candidate status and acceptance notes are retained as history.
@@ -494,3 +499,23 @@ Final candidate remains local to codex/route-hud-refactor; no push, release, mer
 installation occurred. The installed 0.4.2 DLL remains byte-identical. Latest complete validation
 and package hashes are in build/validation-receipt.json, build/unified-artifact-audit.json and the
 artifact SHA256 sidecar. Settings field-contract evidence was also rechecked against the final DLL.
+
+## 0.5.0 installed for James's test - 23 October 2026
+
+At James's explicit request, Install.ps1 installed the existing validated 0.5.0 package with the game
+closed. All 14 installed package files match their verified hashes; assembly version is 0.5.0.0.
+Package SHA256: 9788842B7F1D13DFA694BFD6312CFF4644C37F03A13AFEA88D3DDBC2E1CF4F2C.
+
+Verified backup of the previous complete mod, Settings.xml, cache and original UMM Params.xml:
+artifacts/backups/upgrade-0.5.0-1fcd080ca46844cc9df6ad9284cb15c1/.
+Its installation-receipt.json records package/installed/settings hashes and before/after UMM flags.
+Settings.xml remains byte-identical. A surgical Params.xml edit changed only DadsRouteHUD
+Enabled=false -> true and DadsDrivingHUD Enabled=true -> false; parsed XML was compared with the
+expected two-attribute change. Every other mod/global setting is preserved. This supersedes the
+installer's initial flag-preservation receipt, with final flags/hashes recorded alongside it.
+
+Only this HUD's already-backed-up DadsRouteHUD.dll.*.cache files were cleared; none remain.
+The game was not launched. On James's next run, UMM must regenerate a 0.5.0 shadow copy; verify its
+version/hash against the installed DLL before attributing runtime results. Visual, signal-stability
+and real frame-time acceptance remain pending. The candidate ZIP was not rebuilt for this
+post-install documentation entry; its bundled handover correctly records the earlier build state.
