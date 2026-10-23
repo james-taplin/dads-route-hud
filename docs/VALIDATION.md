@@ -49,7 +49,28 @@ git diff --check
 ./tests/Install.Tests.ps1
 ```
 
-Expect zero build warnings/errors and 680 checks across nine suites: 14 driving, 269 route/layout/naming, 67 capture-service lifecycle, 90 native-geometry, 41 native station/destination, 65 production sign-index, 56 actual optional-adapter, 33 car-list and 45 telemetry/registry. The installer fixtures add 12 assertions and the PE contract audit matches 64/64 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
+Expect zero build warnings/errors and 733 checks across nine suites: 14 driving, 269 route/layout/naming, 67 capture-service lifecycle plus 22 HUD timing, 90 native-geometry, 41 native station/destination, 96 production sign-index, 56 actual optional-adapter, 33 car-list and 45 telemetry/registry. The installer fixtures add 12 assertions and the PE contract audit matches 64/64 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
+
+## 0.5.3 collector performance - stationary runtime comparison required
+
+Preserve the 20,000 m look-ahead and current event filters. After verifying the loaded 0.5.3 DLL/cache,
+use a fresh game session to avoid earlier broad-profiling history. Let the loaded scene settle,
+close UMM and hold the train at the same stationary position for at least 90 seconds. Keep existing
+HUD logging enabled. Read the `HUD timings (inclusive; do not add)` aggregates: HudUpdate,
+RouteCollectStep, each SignDiscovery stage, SignMaintenance/RootRefresh/Bootstrap/Projection,
+RouteFinish/Publish/Merge/Shift and ListLayout. Compare maxima and over-2-ms counts with the preserved
+0.5.1 callback/collector evidence; do not sum overlapping stages or equate FPS changes with isolated
+HUD cost. Recurring scene discovery should be absent once initial/availability work has settled.
+
+If using DVPerfProbe for callback corroboration, its supported mode 3 with TimeScripts=false and
+TimeModCallbacks=true avoids broad method timers. Preserve and restore its exact settings. Do not
+change FSR, graphics or unrelated mods as part of this comparison. Mode 2 remains suitable for
+ordinary frame-window evidence, with HUD stage timings providing the leaf split.
+
+Check event/sign coverage alongside timing, including a native and DoubleTrack late placement,
+world shift, raw/accessory edit and root removal. Cold discovery/optional activation can still
+produce a one-time native call; record it separately from recurring stationary work. Native scene
+queries and cooperative budgets are not timed by boundary doubles. James launches the game.
 
 ## 0.5.2 readable list, junction destinations and DoubleTrack signs - runtime acceptance pending
 

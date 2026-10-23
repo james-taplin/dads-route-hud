@@ -15,7 +15,8 @@ internal static class NativeSignsProgram
     { if (!condition) throw new Exception(message); checks++; }
     private static RailTrack Track(string name) => new GameObject(name).Add(new RailTrack { name = name });
     private static SignPlacer Placer(bool plans = false) => new GameObject("Placer").Add(new SignPlacer { placeTrackSigns = plans });
-    private static SignParameters Part(SignType type, string text, GameObject? prefab = null, GameObject[]? accessories = null)
+    private static BaseSign Prefab(string name) => new GameObject(name).Add(new BaseSign { name = name });
+    private static SignParameters Part(SignType type, string text, BaseSign? prefab = null, GameObject[]? accessories = null)
         => new SignParameters { type = type, signText = text, sign = prefab, accessories = accessories };
     private static GameObject Root(Vector3 position, SignParameters[] parts)
     {
@@ -36,10 +37,12 @@ internal static class NativeSignsProgram
     private static void Prepare()
     {
         NativeRouteSignIndex.Reset();
+        HarmonyLib.Harmony.Reset();
         UnityEngine.Object.ClearScene();
         UnityModManagerNet.UnityModManager.DoubleTrack = null;
         Time.realtimeSinceStartup = 1;
         WorldMover.currentMove = default;
+        HudTimings.Enabled = false;
     }
     private static void Main()
     {
@@ -48,8 +51,173 @@ internal static class NativeSignsProgram
         RecipeSignatureAndCache();
         RejectedRecipeAndProjection();
         DoubleTrackPlacementAndLateEnable();
+        IncrementalMaintenanceAndOriginShift();
+        OptionalDiscoveryAndLateRecipeShift();
         NativeRouteSignIndex.Reset();
         Console.WriteLine(checks + " actual native-sign index checks passed (reflection/Unity/native boundary doubles; not game acceptance).");
+    }
+
+    private static void FinishMaintenance(int roots)
+    {
+        for (var i = 0; i <= roots / 32 + 2; i++) NativeRouteSignIndex.Prune();
+    }
+
+    private static void IncrementalMaintenanceAndOriginShift()
+    {
+        Prepare();
+        var track = Track("Thousands of known roots");
+        var placer = Placer();
+        const int count = 2048;
+        var roots = Enumerable.Range(0, count).Select(i => Root(new Vector3(i, 0, 0),
+            new[] { Part(SignType.SpeedLimit, "8") })).ToArray();
+        foreach (var root in roots) Observe(placer, track, root.transform.position, root);
+        var entries = NativeRouteSignIndex.EnsureTrack(track);
+        Check(entries.Count == count, "Thousands of observed roots remain retained without an importance or count cap");
+        var searches = UnityEngine.Object.FindCalls;
+        var projections = track.ProjectionReads;
+        Check(searches == 3, "Initial native census performs only its three supported source searches");
+        for (var cycle = 0; cycle < 3; cycle++)
+        {
+            FinishMaintenance(count);
+            Time.realtimeSinceStartup += 6;
+            var reads = UnityEngine.Object.ComponentReads;
+            NativeRouteSignIndex.Prune();
+            Check(UnityEngine.Object.ComponentReads - reads <= 64,
+                "A recurring maintenance step reads no more than 32 known roots");
+            FinishMaintenance(count);
+            Check(ReferenceEquals(entries, NativeRouteSignIndex.EnsureTrack(track)),
+                "Unchanged time refresh preserves the immutable per-track cache");
+        }
+        Check(UnityEngine.Object.FindCalls == searches && track.ProjectionReads == projections,
+            "Recurring maintenance never repeats scene discovery or known-track projection on unchanged data");
+
+        var move = new Vector3(1200, 0, 350);
+        WorldMover.currentMove = move;
+        foreach (var root in roots) root.transform.position += move;
+        Time.realtimeSinceStartup += 6;
+        FinishMaintenance(count);
+        Check(ReferenceEquals(entries, NativeRouteSignIndex.EnsureTrack(track))
+            && UnityEngine.Object.FindCalls == searches && track.ProjectionReads == projections,
+            "World-origin movement alone preserves relative spatial cells and cached exact spans without a scene census");
+
+        var revision = NativeRouteSignIndex.SnapshotRevision;
+        roots[count - 1].GetComponent<SignGeneratorData>()!.signParameters[0] = Part(SignType.SpeedLimit, "9");
+        Time.realtimeSinceStartup += 6;
+        NativeRouteSignIndex.Prune();
+        Check(ReferenceEquals(entries, NativeRouteSignIndex.EnsureTrack(track)),
+            "Changed content beyond the first batch is deferred rather than synchronously scanning all roots");
+        FinishMaintenance(count);
+        var changed = NativeRouteSignIndex.EnsureTrack(track);
+        Check(changed.Count == count && changed.Count(entry => entry.Label == "90 km/h") == 1
+            && NativeRouteSignIndex.SnapshotRevision > revision,
+            "Incremental maintenance reaches a late raw-content edit and retains every other observation");
+        Check(changed.Last().SourceId == entries.Last().SourceId && UnityEngine.Object.FindCalls == searches,
+            "Raw-content updates preserve source identity without global rediscovery");
+
+        roots[0].Destroyed = true;
+        roots[count - 1].Destroyed = true;
+        Time.realtimeSinceStartup += 6;
+        FinishMaintenance(count);
+        Check(NativeRouteSignIndex.EnsureTrack(track).Count == count - 2,
+            "Incremental removal handles destroyed first and swapped last roots without losing live observations");
+        Check(NativeRouteSignIndex.Coverage.Contains("0 scene roots unassociated")
+            && UnityEngine.Object.FindCalls == searches,
+            "Destroyed roots leave neither stale membership nor incomplete-coverage counts and trigger no scene scan");
+
+        var late = Root(new Vector3(3000, 0, 350), new[] { Part(SignType.Grade, "+2") });
+        Observe(placer, track, new Vector3(3000, 0, 350), late);
+        var lateEntries = NativeRouteSignIndex.EnsureTrack(track);
+        Check(lateEntries.Count == count - 1 && lateEntries.Any(entry => entry.Kind == RouteEventKind.Grade && entry.Span == 1800),
+            "Existing native placement observer captures new generation after an origin shift");
+        Check(UnityEngine.Object.FindCalls == searches, "Late native placement indexes directly without rebuilding the scene census");
+    }
+
+    private static void OptionalDiscoveryAndLateRecipeShift()
+    {
+        Prepare();
+        var track = Track("Optional activation after HUD discovery");
+        var placer = new GameObject("Late active optional placer").Add(new CustomSignPlacer());
+        var parts = new[] { Part(SignType.SpeedLimit, "8") };
+        var first = Root(new Vector3(50, 0, 0), parts);
+        placer.AddPlan(track, first.transform.position, false, parts);
+        Check(NativeRouteSignIndex.EnsureTrack(track).Count == 0,
+            "Inactive optional implementation cannot invent an exact track association");
+        var searches = UnityEngine.Object.FindCalls;
+        UnityModManagerNet.UnityModManager.DoubleTrack = new UnityModManagerNet.UnityModManager.ModEntry
+        { Loaded = true, Active = true, Assembly = typeof(CustomSignPlacer).Assembly };
+        Time.realtimeSinceStartup += 6;
+        NativeRouteSignIndex.Prune();
+        Check(NativeRouteSignIndex.EnsureTrack(track).Count == 1 && HarmonyLib.Harmony.PatchCalls == 1,
+            "Optional activation discovers existing roots and installs the same passive placement observer once");
+        Check(UnityEngine.Object.FindCalls == searches + 3,
+            "Newly available optional source performs a single optional placer and existing-root census");
+        searches = UnityEngine.Object.FindCalls;
+        var second = Root(new Vector3(100, 0, 0), new[] { Part(SignType.Grade, "-1") });
+        var data = placer.AddPlan(track, second.transform.position, false, second.GetComponent<SignGeneratorData>()!.signParameters);
+        placer.ObservePlacementForTest(data, second);
+        Check(NativeRouteSignIndex.EnsureTrack(track).Count == 2 && UnityEngine.Object.FindCalls == searches,
+            "Future optional generation after delayed activation reaches the actual deferred observer without scene discovery");
+        for (var i = 0; i < 3; i++) { Time.realtimeSinceStartup += 6; NativeRouteSignIndex.Prune(); }
+        Check(HarmonyLib.Harmony.PatchCalls == 1 && UnityEngine.Object.FindCalls == searches,
+            "Stable optional availability does not repeat patch ownership checks, patching or scene scans");
+        UnityModManagerNet.UnityModManager.DoubleTrack.Active = false;
+        Time.realtimeSinceStartup += 6; NativeRouteSignIndex.Prune();
+        UnityModManagerNet.UnityModManager.DoubleTrack.Active = true;
+        Time.realtimeSinceStartup += 6; NativeRouteSignIndex.Prune();
+        Check(HarmonyLib.Harmony.PatchCalls == 1,
+            "Reactivation recognises the already attached exact observer and cannot add duplicate postfixes");
+
+        Prepare();
+        track = Track("Origin-relative late-enable candidates");
+        var native = Placer(plans: true);
+        var root = Root(new Vector3(80, 0, 0), parts);
+        native.AddPlan(track, root.transform.position, false, parts);
+        var other = Track("First census only");
+        NativeRouteSignIndex.EnsureTrack(other);
+        searches = UnityEngine.Object.FindCalls;
+        var move = new Vector3(1000, 0, 400);
+        root.transform.position += move; WorldMover.currentMove = move;
+        var matched = NativeRouteSignIndex.EnsureTrack(track);
+        Check(matched.Count == 1 && matched[0].Span == 80 && matched[0].Fact.Contains("Native recipe matched"),
+            "Previously unassociated root remains an exact late-recipe candidate after a world-origin shift");
+        Check(UnityEngine.Object.FindCalls == searches, "Origin-relative late-enable matching needs no replacement scene census");
+
+        Prepare();
+        track = Track("Ambiguity removed after census"); native = Placer(plans: true);
+        var survivor = Root(new Vector3(50, 0, 0), parts);
+        var removed = Root(new Vector3(50, 0, 0), parts);
+        native.AddPlan(track, survivor.transform.position, false, parts);
+        Check(NativeRouteSignIndex.EnsureTrack(track).Count == 0, "Initial coincident roots reject ambiguous late recipes");
+        removed.Destroyed = true;
+        Time.realtimeSinceStartup += 6; FinishMaintenance(2);
+        Check(NativeRouteSignIndex.EnsureTrack(track).Count == 1,
+            "Removing an unassociated ambiguous candidate retries the native recipe against the sole surviving root");
+
+        Prepare();
+        track = Track("Unassociated root moved after census"); native = Placer(plans: true);
+        root = Root(new Vector3(50, 0, 0), parts);
+        native.AddPlan(track, new Vector3(75, 0, 0), false, parts);
+        Check(NativeRouteSignIndex.EnsureTrack(track).Count == 0, "Root outside strict recipe position remains unassociated");
+        searches = UnityEngine.Object.FindCalls;
+        root.transform.position = new Vector3(75, 0, 0);
+        Time.realtimeSinceStartup += 6; FinishMaintenance(1);
+        Check(NativeRouteSignIndex.EnsureTrack(track).Single().Span == 75 && UnityEngine.Object.FindCalls == searches,
+            "Known root movement updates its relative spatial cell and retries strict recipes without scene discovery");
+
+        Prepare();
+        track = Track("In-place native accessory edits"); native = Placer();
+        var accessories = new[] { new GameObject("Before") };
+        parts = new[] { Part(SignType.SpeedLimit, "8", accessories: accessories) };
+        root = Root(new Vector3(50, 0, 0), parts);
+        Observe(native, track, root.transform.position, root);
+        var before = NativeRouteSignIndex.EnsureTrack(track);
+        accessories[0] = new GameObject("After");
+        Time.realtimeSinceStartup += 6; FinishMaintenance(1);
+        var after = NativeRouteSignIndex.EnsureTrack(track);
+        Check(before.Count == 2 && after.Count == 2 && after.Any(entry => entry.Label == "Accessory · After"),
+            "Content snapshots detect edits inside an existing accessory array instead of comparing the same mutable reference");
+        Check(before.Select(entry => entry.SourceId).SequenceEqual(after.Select(entry => entry.SourceId)),
+            "Native accessory edits preserve every part and accessory source identifier");
     }
 
     private static void DoubleTrackPlacementAndLateEnable()
@@ -98,8 +266,8 @@ internal static class NativeSignsProgram
         { Loaded = true, Active = true, Assembly = typeof(CustomSignPlacer).Assembly };
         track = Track("Late DoubleTrack road");
         placer = new GameObject("Late DoubleTrack placer").Add(new CustomSignPlacer { sideways = 2 });
-        var prefab = new GameObject("Native speed prefab");
-        parts = new[] { Part(SignType.SpeedLimit, "6", prefab), Part(SignType.Grade, "+2", new GameObject("Native grade prefab")) };
+        var prefab = Prefab("Native speed prefab");
+        parts = new[] { Part(SignType.SpeedLimit, "6", prefab), Part(SignType.Grade, "+2", Prefab("Native grade prefab")) };
         Root(new Vector3(250, 0, 0), parts);
         placer.AddPlan(track, new Vector3(252, 0, 0), true, parts);
         entries = NativeRouteSignIndex.EnsureTrack(track);
@@ -162,12 +330,12 @@ internal static class NativeSignsProgram
         var a = Track("A");
         var b = Track("B");
         var placer = Placer();
-        var speedPrefab = new GameObject("SpeedPrefab");
+        var speedPrefab = Prefab("SpeedPrefab");
         var accessory = new GameObject("ExtraArrow");
         var parts = new[]
         {
             Part(SignType.SpeedLimit, "8", speedPrefab, new[] { accessory, null! }),
-            Part(SignType.Grade, "-1.5", new GameObject("GradePrefab"))
+            Part(SignType.Grade, "-1.5", Prefab("GradePrefab"))
         };
         var root = Root(new Vector3(100, 0, 3), parts);
         Observe(placer, a, new Vector3(100, 0, 0), root);
@@ -240,7 +408,7 @@ internal static class NativeSignsProgram
         Prepare();
         var track = Track("Late track");
         var placer = Placer(plans: true);
-        var prefab = new GameObject("Recipe prefab");
+        var prefab = Prefab("Recipe prefab");
         var parts = new[] { Part(SignType.SpeedLimit, "8", prefab) };
         var root = Root(new Vector3(50, 0, 0), parts);
         placer.AddPlan(track, new Vector3(50, 0, 0), false, parts);
@@ -260,11 +428,12 @@ internal static class NativeSignsProgram
         var extraParts = new[] { Part(SignType.WarningBoard, "Late root", prefab) };
         var extraRoot = Root(new Vector3(75, 0, 0), extraParts);
         placer.AddPlan(track, new Vector3(75, 0, 0), false, extraParts);
+        Observe(placer, track, new Vector3(75, 0, 0), extraRoot);
         Time.realtimeSinceStartup += 6;
         refreshed = NativeRouteSignIndex.EnsureTrack(track);
         Check(refreshed.Count == 2 && refreshed.Any(s => s.SourceId.StartsWith("native-sign:" + extraRoot.GetInstanceID() + ":")),
-            "Newly observed native root invalidates membership bootstrap and becomes associated by exact recipe");
-        Check(placer.RecipeCalls > calls, "New unassociated root triggers fresh native recipe validation");
+            "Native placement observer retains newly generated root after initial late-enable discovery");
+        Check(placer.RecipeCalls == calls, "Exact late native placement needs no repeated recipe or scene census");
         var revision = NativeRouteSignIndex.SnapshotRevision;
         calls = placer.RecipeCalls;
         track.Regenerate();
@@ -280,8 +449,8 @@ internal static class NativeSignsProgram
         Prepare();
         var track = Track("Recipe track");
         var placer = Placer(plans: true);
-        var firstPrefab = new GameObject("First prefab");
-        var secondPrefab = new GameObject("Second prefab");
+        var firstPrefab = Prefab("First prefab");
+        var secondPrefab = Prefab("Second prefab");
         var parts = new[] { Part(SignType.SpeedLimit, "8", firstPrefab) };
         Root(new Vector3(50, 0, 0), parts);
         placer.AddPlan(track, new Vector3(50, 0, 0), false, new[] { Part(SignType.SpeedLimit, "8", secondPrefab) });

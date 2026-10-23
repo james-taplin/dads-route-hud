@@ -15,6 +15,7 @@
     <Compile Include="../Route/RouteTurn.cs" />
     <Compile Include="../Route/RouteNaming.cs" />
     <Compile Include="../Providers/RouteMonitorService.cs" />
+    <Compile Include="../Providers/HudTimings.cs" />
     <Compile Include="RouteServiceStubs.cs" />
     <Compile Include="RouteServiceProgram.cs" />
   </ItemGroup>

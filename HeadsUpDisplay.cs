@@ -69,6 +69,8 @@ namespace DvMod.HeadsUpDisplay
 
         private static void ResetTelemetry()
         {
+            HudTimings.Reset();
+            HudTimings.Enabled = enabled && !unloaded && settings.enableLogging;
             NativeTelemetry.Reset();
             OptionalSignalTelemetry.Reset();
             RouteMonitorService.Reset();
@@ -86,24 +88,34 @@ namespace DvMod.HeadsUpDisplay
         private static void OnUpdate(UnityModManager.ModEntry modEntry, float deltaTime)
         {
             if (!enabled || unloaded) return;
-            SavePendingSettings();
-            var car = PlayerManager.Car ?? PlayerManager.LastLoco;
-            var worldReady = AStartGameData.carsAndJobsLoadingFinished && WorldStreamingInit.IsLoaded;
-            NativeTelemetry.Update(worldReady ? car : null);
-            CarList.Update(worldReady ? car : null);
-            if (settings.trackInfoSettings.enabled && worldReady)
+            HudTimings.Enabled = settings.enableLogging;
+            var timing = HudTimings.Measure(HudTimingStage.HudUpdate);
+            try
             {
-                RouteMonitorService.Update(car);
-            }
-            else
-            {
-                if (RouteMonitorService.IsActive || OptionalSignalTelemetry.IsAvailable
-                    || OptionalSignalTelemetry.IsReading || OptionalSignalTelemetry.SampledAt > 0)
+                SavePendingSettings();
+                var car = PlayerManager.Car ?? PlayerManager.LastLoco;
+                var worldReady = AStartGameData.carsAndJobsLoadingFinished && WorldStreamingInit.IsLoaded;
+                NativeTelemetry.Update(worldReady ? car : null);
+                CarList.Update(worldReady ? car : null);
+                if (settings.trackInfoSettings.enabled && worldReady)
                 {
-                    OptionalSignalTelemetry.Reset();
-                    RouteMonitorService.Reset();
+                    NativeRouteSignIndex.Prune();
+                    RouteMonitorService.Update(car);
+                }
+                else
+                {
+                    if (RouteMonitorService.IsActive || OptionalSignalTelemetry.IsAvailable
+                        || OptionalSignalTelemetry.IsReading || OptionalSignalTelemetry.SampledAt > 0)
+                    {
+                        OptionalSignalTelemetry.Reset();
+                        RouteMonitorService.Reset();
+                    }
                 }
             }
+            finally { timing.Dispose(); }
+            var timingReport = HudTimings.TakeReport(Time.realtimeSinceStartup);
+            if (timingReport != null) modEntry.Logger.Log(timingReport + "; selected="
+                + settings.trackInfoSettings.maxEventSpan + "m retained=" + RouteMonitorService.Current.Events.Count);
         }
 
         private static void OnLoadingFinished()

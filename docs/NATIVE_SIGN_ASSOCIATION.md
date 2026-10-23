@@ -15,7 +15,22 @@ A late-enabled mod cannot recover the discarded association by reading SignGener
 
 Candidates are indexed spatially for matching the already known native recipe; this is not a nearest-track association. Multiple matches, cross-track recipe disagreement, unmatched recipes or unavailable native contracts are rejected and reported as partial coverage. Each retained source is projected only onto its already established track. NativeRouteGeometry rejects projection farther than one metre from that track. Position offsets are evaluated in the current scene frame so world-origin shifts do not select parallel rails.
 
-Track-point subscriptions invalidate relevant caches, and reset unsubscribes them. Destroyed Unity objects are pruned. A five-second observation refresh detects actual sign-root or raw-content changes; native recipes are revalidated after those changes, rather than rebuilt periodically on an unchanged map. Captured associations survive ordinary HUD toggles and LoadingFinished; full reset is reserved for unload. If every observed native root already has a captured association, another recipe pass adds no evidence and is skipped.
+Track-point subscriptions invalidate relevant caches, and reset unsubscribes them. Version 0.5.3
+performs an initial scene census once, plus discovery when the optional placer first becomes
+available. Both supported placers route future generation through their existing observed PlaceSign;
+late optional activation attaches that same checked observer if it was unavailable at HUD load.
+Known-root maintenance starts at the existing five-second cadence and advances at most 32 roots
+and 16 tracks per call, including one active-HUD Update call per frame. Unchanged roots retain
+their per-track projection caches. Raw edits, accessory changes, destroyed or moved roots and track
+geometry invalidate affected data; removing an ambiguous candidate retries unresolved recipes.
+Spatial cells use the origin-relative frame, so world shifts need no new scene census.
+Captured associations survive ordinary HUD toggles and LoadingFinished; full reset is reserved for
+unload. Another native recipe pass is skipped when every observed root already has an association.
+
+Initial discovery and individual native recipe/projection calls still cannot be pre-empted. With
+HUD logging enabled, stage timings separate each scene query, root indexing/refresh, recipes and
+projection from route collection/publication and list layout. Reports are aggregate and inclusive;
+parent and child times must not be added. Runtime performance remains a separate acceptance check.
 
 Coverage explicitly describes observed roots, validated recipe matches, unmatched plans and unassociated scene roots. Some unassociated roots may be outside the requested route; they still prevent an unsupported global completeness claim. Diagnostics are retained since reset, including historical failures, so a previously observed problem remains visible rather than silently disappearing.
 

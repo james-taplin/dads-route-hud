@@ -1,9 +1,9 @@
 # Development status
 
-Latest test installation, 23 October 2026: 0.5.2 is installed for James's readable-list, missing
-speed/grade and junction destination request on codex/readable-route-events, based on checkpoint
-51d5dc6. Current settings/UMM flags are preserved and the HUD shadow cache is cleared. See the final
-0.5.2 sections for evidence, validation and the installation receipt; older entries are historical.
+Latest test installation, 23 October 2026: 0.5.3 corrects recurring sign-index work on
+codex/route-hud-performance, based on 0.5.2 checkpoint fbe8a88. Settings and the 20 km range are
+preserved. James chose to test later; 0.5.3 runtime improvement remains unmeasured. The preserved
+handoff confirms a 0.5.1 collector stall, not a demonstrated hardware limit. See the final sections.
 
 The 0.5.0 refactor was developed on codex/route-hud-refactor from the completed 0.4.2 checkpoint
 bb92b42, then installed at James's request. Older candidate status and acceptance notes below
@@ -643,3 +643,81 @@ Route HUD was already enabled and Driving HUD disabled, and both flags remain as
 Only backed-up DadsRouteHUD.dll.*.cache files were removed; none remain until UMM regenerates one.
 The game was not launched. The audited ZIP is unchanged by this post-installation source record;
 its bundled handover records the earlier build state. No push or release was made.
+
+## 0.5.3 recurring collector stall - 23 October 2026
+
+James supplied HUD_BUILD_SESSION_REPORT.md from the Toolbox performance investigation. Preserved
+evidence lives under his Toolbox workspace evidence/hitch-attribution-20261023; all eight snapshot
+hashes and three exact-tested source hashes were independently verified. Do not overwrite those
+0.5.1 sources with current work. Mode 3 broad timers identified OnUpdate -> Collect at about
+491-646 ms; callback-only timing and a stationary HUD-off/on control corroborated the mod fault.
+At the same (1721,131,4669) position, OFF had no HUD callback and ON2 HUD maxima were 499.28/471.79 ms.
+Parent/child timings are inclusive. The tests contain no GPU timing; other hitches remain.
+
+The tested DLL is 0.5.1 (B8A7B88ACB19800CDA1E01E552FF22643C246F9E875A924A4EC08377C66158E7).
+The handoff did not runtime-measure 0.5.2, which was installed afterward. Source review confirmed
+0.5.2 retained the same periodic invalidation and added the optional placer query. Its previous
+automated checks did not measure Unity scene-query cost. Recorded hardware is i7-13700HX, about
+32 GB RAM and RTX 4080 Laptop. There is no evidence that the 20 km horizon exceeds hardware capacity.
+The collector reads about 800 profile samples at 20 km and yields between samples; whole-scene
+sign discovery is independent of route horizon. The range stays 20,000 m for the comparison.
+
+Confirmed redundant work: EnsureTrack ran Prune and whole-scene root discovery before its cache
+lookup. Every five seconds Prune discarded all track projection caches and marked the root index
+unready, even without membership changes. Origin shifts and new placements could also repeat scene
+discovery. Native RailTrack.GetClosestPoint scans its point set, so cache loss repeats projection
+work too. This is the strongest source-supported explanation for the measured Collect stall; the
+original expensive leaf split remains unmeasured and must not be presented as established fact.
+
+Version 0.5.3 performs initial/optional-availability discovery, then reuses exact placements and
+origin-relative spatial cells. Both installed native and DoubleTrack implementations generate
+future roots through the already observed PlaceSign; no new target or scanner is introduced.
+Late DoubleTrack activation attaches that same checked observer once if PatchAll skipped it while
+inactive. Maintenance advances 32 known roots and 16 tracks per call, including one active Update
+call per frame, and invalidates affected data after actual content/removal/geometry changes.
+Unchanged roots keep caches. Ambiguous candidate removal, raw/accessory edits, destruction,
+late native/optional generation and world shifts remain covered; no horizon/event cap was added.
+
+DVPerfProbe 0.2.0 has no supported arbitrary-method filter for these leaves. HudTimings therefore
+adds logging-gated fixed counters around HUD Update, collector steps, each discovery query, root
+index/refresh, recipes/projections, profile sampling, capture completion, optional telemetry,
+publication/merge/shift, junction names and list rebuilds. Sampling has no heap allocation, file IO
+or Harmony timer patches. Five-second aggregates report inclusive maxima/totals/calls and over-2-ms
+counts, with selected horizon and retained event count. Disable/reset generations prevent old-world
+or unfinished scopes leaking into later reports. Existing enableLogging controls all instrumentation.
+
+Three agents audited evidence/source, implemented the cache/lifecycle correction and cross-reviewed
+coverage/performance. Cold initial discovery, optional activation and individual native recipe or
+projection calls remain synchronous and are separately timed. Full build/test/install evidence and
+the necessary fresh stationary runtime comparison follow below; no measured improvement is claimed
+before that game run. Probe/FSR/graphics settings are preserved. James launches the game.
+
+Full Validate.ps1 passes: zero game-reference compiler warnings/errors, 733 checks across nine
+suites (including 96 actual sign-index and 22 timing-lifecycle checks), 64/64 metadata contracts,
+the 14-file package audit and 12 isolated installer assertions. The sign fixture now matches the
+actual native BaseSign component type, rather than substituting a GameObject, and game-reference
+compilation verifies both component and accessory identity handling. The 2,048-root regression
+retains observations while proving unchanged five-second cycles and world shifts perform no
+additional scene searches, projections or cache replacement. Other checks cover bounded maintenance,
+raw/accessory mutations, removals/ambiguous retry, late optional observation and recipe matching.
+These prove source behavior against boundary doubles, not Unity call duration or a measured fix.
+
+## 0.5.3 installed; stationary measurement deferred - 23 October 2026
+
+With Derail Valley closed, the audited package was installed and all 14 file hashes verified.
+Version 0.5.3.0; DLL SHA256 78B98572ADF5C6EAC8BC53981DD0493DB60FA447D1CDF50D2AB656BE8D5B3200
+(206,336 bytes). ZIP SHA256 BEDD8900D68B894D4ABF406D01E81B8774EC7E3B924FA9D63A152A9F71A2EE32.
+Verified prior mod/cache and Params.xml backup with installation-receipt.json:
+artifacts/backups/upgrade-0.5.3-46347268462446509b0b40b00fdd9683/.
+
+Settings.xml and UMM Params.xml remain byte-identical; look-ahead is 20,000 m, logging enabled,
+Route HUD enabled and Driving HUD disabled. Only backed-up HUD shadow caches were cleared; no
+HUD cache remained at verification. DVPerfProbe settings are untouched (SHA256
+883284597DD55031B2BB93388DE00C3CC22C1BC7F899F6BECEF76813235131CE); FSR/graphics were not changed.
+The game was not launched. Asked to load a fresh stationary 90-second test, James answered
+"I'll test later". Stop here; do not claim new timing numbers or an observed reduction, and do not
+schedule unsolicited follow-up. The next test should preserve this range and inspect loaded cache,
+HUD stage aggregates and coverage as described in VALIDATION.md. The initial/availability census
+can still be synchronous; distinguish that from recurring warm stationary stalls.
+
+The validated ZIP is unchanged by this post-install/deferred-test source record. No push or release.

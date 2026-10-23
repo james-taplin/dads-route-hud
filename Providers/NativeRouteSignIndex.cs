@@ -41,10 +41,14 @@ namespace DvMod.HeadsUpDisplay
         private static readonly HashSet<string> problems = new HashSet<string>(StringComparer.Ordinal);
         private static readonly Dictionary<Cell, List<ObservedRoot>> observed = new Dictionary<Cell, List<ObservedRoot>>();
         private static readonly Dictionary<int, ObservedRoot> observedById = new Dictionary<int, ObservedRoot>();
+        private static readonly List<ObservedRoot> observedRoots = new List<ObservedRoot>();
+        private static readonly List<RailTrack> watchedTracks = new List<RailTrack>();
+        private static readonly HashSet<int> unassociatedRoots = new HashSet<int>();
         private static readonly Dictionary<RailTrack, PlanCounts> planCounts = new Dictionary<RailTrack, PlanCounts>();
-        private static Component[] placers = Array.Empty<Component>();
+        private static readonly List<Component> placers = new List<Component>();
         private static float nextPrune;
-        private static Vector3 indexedWorldMove;
+        private static int refreshCursor, refreshRemaining, trackCursor, tracksRemaining;
+        private static Type? observedDoubleTrackType;
         private static bool observedReady;
 
         public static long SnapshotRevision { get; private set; }
@@ -53,7 +57,7 @@ namespace DvMod.HeadsUpDisplay
         {
             get
             {
-                var unassigned = observedById.Values.Count(root => root.Root != null && !sources.ContainsKey(root.Root.GetInstanceID()));
+                var unassigned = unassociatedRoots.Count;
                 var matchedPlans = planCounts.Values.Sum(value => value.Matched);
                 var unmatchedPlans = planCounts.Values.Sum(value => value.Unmatched);
                 return "Observed native signs; " + matchedPlans + " validated plan matches; " + unmatchedPlans
@@ -65,10 +69,11 @@ namespace DvMod.HeadsUpDisplay
         public static IReadOnlyList<NativeRouteSign> EnsureTrack(RailTrack track)
         {
             if (track == null) return Array.Empty<NativeRouteSign>();
-            Prune();
             EnsureObservedRoots();
-            if (watched.Add(track)) track.TrackPointsUpdated += OnTrackPointsUpdated;
-            if (bootstrapped.Add(track)) Bootstrap(track);
+            Prune();
+            if (watched.Add(track)) { watchedTracks.Add(track); track.TrackPointsUpdated += OnTrackPointsUpdated; }
+            if (bootstrapped.Add(track))
+                using (HudTimings.Measure(HudTimingStage.SignBootstrap)) Bootstrap(track);
             if (cache.TryGetValue(track, out var saved)) return saved;
             var entries = new List<NativeRouteSign>();
             var sourceIds = sourceIdsByTrack.TryGetValue(track, out var ids) ? ids.ToArray() : Array.Empty<int>();
@@ -80,7 +85,11 @@ namespace DvMod.HeadsUpDisplay
                 // of later clearance adjustments to the visible pole, and evaluate it
                 // in the current scene frame after origin shifts.
                 var anchor = source.Anchor + WorldMover.currentMove;
-                if (!NativeRouteGeometry.TryProjectKnownTrack(track, anchor, out var span))
+                double span;
+                bool projected;
+                using (HudTimings.Measure(HudTimingStage.SignProjection))
+                    projected = NativeRouteGeometry.TryProjectKnownTrack(track, anchor, out span);
+                if (!projected)
                 {
                     Problem("Known-track sign projection unavailable: " + source.Id);
                     continue;
@@ -96,22 +105,49 @@ namespace DvMod.HeadsUpDisplay
 
         public static void Prune()
         {
-            if (Time.realtimeSinceStartup < nextPrune) return;
-            nextPrune = Time.realtimeSinceStartup + 5;
-            var changed = false;
-            foreach (var item in sources.Values.Where(source => source.Root == null || source.Track == null).ToArray())
+            if (!observedReady) return;
+            using (HudTimings.Measure(HudTimingStage.SignMaintenance))
             {
-                sources.Remove(item.Id);
-                RemoveTrackMembership(item);
-                if (!ReferenceEquals(item.Track, null)) cache.Remove(item.Track);
-                changed = true;
+                if (refreshRemaining == 0 && tracksRemaining == 0)
+                {
+                    if (Time.realtimeSinceStartup < nextPrune) return;
+                    nextPrune = Time.realtimeSinceStartup + 5;
+                    RefreshOptionalPlacer();
+                    refreshCursor = trackCursor = 0;
+                    refreshRemaining = observedRoots.Count;
+                    tracksRemaining = watchedTracks.Count;
+                }
+                // One collector step must not reread thousands of roots. Finish this
+                // sweep across subsequent steps without truncating the retained index.
+                using (HudTimings.Measure(HudTimingStage.SignRootRefresh))
+                    for (var work = 0; work < 32 && refreshRemaining > 0 && refreshCursor < observedRoots.Count; work++)
+                    {
+                        var entry = observedRoots[refreshCursor];
+                        refreshRemaining--;
+                        if (entry.Root == null) { RemoveObserved(entry); continue; }
+                        if (sources.TryGetValue(entry.Id, out var source) && source.Track == null)
+                            RemoveSource(source);
+                        var moved = entry.Position != entry.Root.transform.position - WorldMover.currentMove;
+                        if (moved) MoveObserved(entry);
+                        if (entry.Refresh() || moved && !sources.ContainsKey(entry.Id))
+                        {
+                            if (sources.TryGetValue(entry.Id, out source)) cache.Remove(source.Track);
+                            else InvalidateUnassociatedPlans();
+                            SnapshotRevision++;
+                        }
+                        refreshCursor++;
+                    }
+                for (var work = 0; work < 16 && tracksRemaining > 0 && trackCursor < watchedTracks.Count; work++)
+                {
+                    var track = watchedTracks[trackCursor];
+                    tracksRemaining--;
+                    if (track != null) { trackCursor++; continue; }
+                    watched.Remove(track!); bootstrapped.Remove(track!); cache.Remove(track!); planCounts.Remove(track!);
+                    var last = watchedTracks.Count - 1;
+                    watchedTracks[trackCursor] = watchedTracks[last]; watchedTracks.RemoveAt(last);
+                    SnapshotRevision++;
+                }
             }
-            foreach (var track in watched.Where(track => track == null).ToArray())
-            { watched.Remove(track); bootstrapped.Remove(track); cache.Remove(track); planCounts.Remove(track); changed = true; }
-            // Re-read raw text and transformed anchors without discarding exact identity.
-            cache.Clear();
-            observedReady = false;
-            if (changed) SnapshotRevision++;
         }
 
         public static void Reset()
@@ -119,9 +155,11 @@ namespace DvMod.HeadsUpDisplay
             foreach (var track in watched) if (track != null) track.TrackPointsUpdated -= OnTrackPointsUpdated;
             watched.Clear(); bootstrapped.Clear(); cache.Clear(); sources.Clear(); ambiguousRoots.Clear();
             sourceIdsByTrack.Clear();
-            observed.Clear(); observedById.Clear(); problems.Clear(); planCounts.Clear();
-            placers = Array.Empty<Component>();
+            observed.Clear(); observedById.Clear(); observedRoots.Clear(); watchedTracks.Clear(); unassociatedRoots.Clear();
+            problems.Clear(); planCounts.Clear(); placers.Clear();
             observedReady = false;
+            observedDoubleTrackType = null;
+            refreshCursor = refreshRemaining = trackCursor = tracksRemaining = 0;
             nextPrune = 0;
             SnapshotRevision++;
         }
@@ -130,7 +168,6 @@ namespace DvMod.HeadsUpDisplay
         {
             cache.Remove(track);
             bootstrapped.Remove(track);
-            observedReady = false;
             SnapshotRevision++;
         }
 
@@ -145,8 +182,9 @@ namespace DvMod.HeadsUpDisplay
                     || !(contract.Flip?.GetValue(data) is bool isFlipped))
                 { Problem("Native sign placement metadata unavailable: " + root.GetInstanceID()); return; }
                 var parts = ReadParts(contract, data, root);
+                AddPlacer(placer);
+                using (HudTimings.Measure(HudTimingStage.SignIndexRoots)) AddObserved(root, "");
                 Register(new Source(root, track, !isFlipped, anchor - root.transform.position, parts, true));
-                observedReady = false;
             }
             catch (Exception exception) { Problem("Native sign observation failed: " + exception.GetBaseException().Message); }
         }
@@ -161,6 +199,7 @@ namespace DvMod.HeadsUpDisplay
                 else
                 {
                     sources.Remove(source.Id); ambiguousRoots.Add(source.Id); cache.Remove(old.Track);
+                    if (observedById.ContainsKey(source.Id)) unassociatedRoots.Add(source.Id);
                     RemoveTrackMembership(old);
                     Problem("Ambiguous native-plan association rejected: sign root " + source.Id);
                     SnapshotRevision++;
@@ -168,6 +207,7 @@ namespace DvMod.HeadsUpDisplay
                 }
             }
             sources[source.Id] = source;
+            unassociatedRoots.Remove(source.Id);
             if (!sourceIdsByTrack.TryGetValue(source.Track, out var ids))
                 sourceIdsByTrack[source.Track] = ids = new HashSet<int>();
             ids.Add(source.Id);
@@ -188,8 +228,8 @@ namespace DvMod.HeadsUpDisplay
             var counts = planCounts[track] = new PlanCounts();
             // With normal startup capture every observed native root already has an
             // exact association. A second geometric recipe pass adds no evidence.
-            if (observedById.Count > 0 && observedById.Keys.All(id => sources.ContainsKey(id))) return;
-            if (placers.Length == 0) { Problem("No live native sign placer available for late-enable validation"); return; }
+            if (observedById.Count > 0 && unassociatedRoots.Count == 0) return;
+            if (placers.Count == 0) { Problem("No live native sign placer available for late-enable validation"); return; }
             foreach (var placer in placers)
             {
                 if (placer == null) continue;
@@ -269,46 +309,134 @@ namespace DvMod.HeadsUpDisplay
 
         private static void EnsureObservedRoots()
         {
-            if (observedReady && WorldMover.currentMove == indexedWorldMove) return;
-            var previous = observedById.ToDictionary(pair => pair.Key, pair => pair.Value.ContentSignature);
-            observed.Clear(); observedById.Clear();
-            var previousPlacers = placers;
-            var foundPlacers = UnityEngine.Object.FindObjectsOfType<SignPlacer>().Cast<Component>();
+            if (observedReady) return;
+            // Existing roots require one late-enable census. Both supported native
+            // placers subsequently pass every generated root through ObservePlacement.
+            using (HudTimings.Measure(HudTimingStage.SignDiscoveryNativePlacers))
+                foreach (var placer in UnityEngine.Object.FindObjectsOfType<SignPlacer>()) AddPlacer(placer);
             var doubleTrack = DoubleTrackPlacerType();
             if (doubleTrack != null)
-                foundPlacers = foundPlacers.Concat(UnityEngine.Object.FindObjectsOfType(doubleTrack).OfType<Component>());
-            placers = foundPlacers.ToArray();
-            foreach (var debug in UnityEngine.Object.FindObjectsOfType<SignDebug>())
-                AddObserved(debug.gameObject, debug.text);
-            foreach (var data in UnityEngine.Object.FindObjectsOfType<SignGeneratorData>())
-                AddObserved(data.gameObject, data.GetComponent<SignDebug>()?.text ?? "");
-            indexedWorldMove = WorldMover.currentMove;
+                DiscoverOptionalPlacers(doubleTrack);
+            DiscoverExistingRoots();
+            observedDoubleTrackType = doubleTrack;
             observedReady = true;
-            if (previousPlacers.Length != placers.Length || previousPlacers.Any(old => !placers.Contains(old))
-                || previous.Count != observedById.Count || observedById.Any(pair =>
-                !previous.TryGetValue(pair.Key, out var signature) || signature != pair.Value.ContentSignature))
+        }
+        private static void RefreshOptionalPlacer()
+        {
+            var type = DoubleTrackPlacerType();
+            if (type == observedDoubleTrackType) return;
+            observedDoubleTrackType = type;
+            if (type != null)
             {
-                // Late-generated or edited signs deserve another validation pass. Do
-                // not rebuild native recipes every five seconds on an unchanged map.
-                bootstrapped.Clear();
-                cache.Clear();
-                SnapshotRevision++;
+                DiscoverOptionalPlacers(type);
+                // The optional patch may have been unavailable at HUD load. Recover
+                // its already-created roots once when that source becomes available.
+                DiscoverExistingRoots();
             }
+            InvalidateUnassociatedPlans();
+            SnapshotRevision++;
+        }
+        private static void DiscoverOptionalPlacers(Type type)
+        {
+            EnsureOptionalObserver(type);
+            using (HudTimings.Measure(HudTimingStage.SignDiscoveryDoubleTrackPlacers))
+                foreach (var placer in UnityEngine.Object.FindObjectsOfType(type).OfType<Component>()) AddPlacer(placer);
+        }
+        private static void EnsureOptionalObserver(Type type)
+        {
+            try
+            {
+                var contract = Contract(type);
+                var postfix = typeof(ObserveDoubleTrackPlacement).GetMethod("Postfix", BindingFlags.NonPublic | BindingFlags.Static)!;
+                if (!contract.Ready || contract.PlaceSign?.ReturnType != typeof(GameObject))
+                { Problem("DoubleTrack sign placement contract unavailable; coverage partial"); return; }
+                const string owner = "DadsRouteHUD";
+                var patches = Harmony.GetPatchInfo(contract.PlaceSign);
+                if (patches != null && patches.Postfixes.Any(patch => patch.owner == owner && patch.PatchMethod == postfix)) return;
+                // PatchAll can legitimately skip this optional target while the mod
+                // is inactive. Attach the same checked passive observer on activation.
+                new Harmony(owner).Patch(contract.PlaceSign, postfix: new HarmonyMethod(postfix) { priority = Priority.Last });
+            }
+            catch (Exception exception)
+            { Problem("DoubleTrack placement observer unavailable: " + exception.GetBaseException().Message + "; coverage partial"); }
+        }
+        private static void DiscoverExistingRoots()
+        {
+            SignDebug[] debugRoots;
+            SignGeneratorData[] generatedRoots;
+            using (HudTimings.Measure(HudTimingStage.SignDiscoveryDebugRoots))
+                debugRoots = UnityEngine.Object.FindObjectsOfType<SignDebug>();
+            using (HudTimings.Measure(HudTimingStage.SignDiscoveryGeneratorRoots))
+                generatedRoots = UnityEngine.Object.FindObjectsOfType<SignGeneratorData>();
+            using (HudTimings.Measure(HudTimingStage.SignIndexRoots))
+            {
+                foreach (var debug in debugRoots) AddObserved(debug.gameObject, debug.text);
+                foreach (var data in generatedRoots) AddObserved(data.gameObject, "");
+            }
+        }
+        private static void AddPlacer(Component placer)
+        {
+            if (placers.Contains(placer)) return;
+            placers.Add(placer);
+            if (observedReady && unassociatedRoots.Count > 0) InvalidateUnassociatedPlans();
+        }
+        private static void InvalidateUnassociatedPlans()
+        {
+            bootstrapped.Clear();
+            cache.Clear();
         }
         private static void AddObserved(GameObject root, string text)
         {
             var id = root.GetInstanceID();
             if (observedById.ContainsKey(id)) return;
-            var data = root.GetComponent<SignGeneratorData>();
-            var entry = new ObservedRoot(root, text, data != null ? data.signParameters : null);
+            var entry = new ObservedRoot(root, id, observedRoots.Count, text);
             observedById[id] = entry;
-            var key = new Cell(root.transform.position);
+            observedRoots.Add(entry);
+            if (!sources.ContainsKey(id)) unassociatedRoots.Add(id);
+            var key = new Cell(entry.Position);
             if (!observed.TryGetValue(key, out var group)) observed[key] = group = new List<ObservedRoot>();
             group.Add(entry);
         }
+        private static void MoveObserved(ObservedRoot entry)
+        {
+            RemoveFromCell(entry);
+            entry.Position = entry.Root.transform.position - WorldMover.currentMove;
+            var key = new Cell(entry.Position);
+            if (!observed.TryGetValue(key, out var group)) observed[key] = group = new List<ObservedRoot>();
+            group.Add(entry);
+        }
+        private static void RemoveFromCell(ObservedRoot entry)
+        {
+            var key = new Cell(entry.Position);
+            if (!observed.TryGetValue(key, out var group)) return;
+            group.Remove(entry);
+            if (group.Count == 0) observed.Remove(key);
+        }
+        private static void RemoveObserved(ObservedRoot entry)
+        {
+            RemoveFromCell(entry);
+            observedById.Remove(entry.Id);
+            if (unassociatedRoots.Remove(entry.Id)) InvalidateUnassociatedPlans();
+            var last = observedRoots.Count - 1;
+            var replacement = observedRoots[last];
+            observedRoots[entry.Index] = replacement;
+            replacement.Index = entry.Index;
+            observedRoots.RemoveAt(last);
+            if (sources.TryGetValue(entry.Id, out var source)) RemoveSource(source);
+            SnapshotRevision++;
+        }
+        private static void RemoveSource(Source source)
+        {
+            sources.Remove(source.Id);
+            RemoveTrackMembership(source);
+            if (!ReferenceEquals(source.Track, null)) cache.Remove(source.Track);
+            if (observedById.ContainsKey(source.Id) && unassociatedRoots.Add(source.Id)) InvalidateUnassociatedPlans();
+            SnapshotRevision++;
+        }
         private static IEnumerable<ObservedRoot> Candidates(Vector3 position)
         {
-            var key = new Cell(position);
+            // Origin-relative cells stay valid when the entire scene is shifted.
+            var key = new Cell(position - WorldMover.currentMove);
             for (var x = -1; x <= 1; x++)
                 for (var y = -1; y <= 1; y++)
                     for (var z = -1; z <= 1; z++)
@@ -463,11 +591,56 @@ namespace DvMod.HeadsUpDisplay
         private sealed class ObservedRoot
         {
             public readonly GameObject Root;
-            public readonly string Text;
-            public readonly SignParameters[]? Parts;
-            public readonly string ContentSignature;
-            public ObservedRoot(GameObject root, string text, SignParameters[]? parts)
-            { Root = root; Text = text; Parts = parts; ContentSignature = parts != null ? Signature(parts) : text; }
+            public readonly int Id;
+            public int Index;
+            public Vector3 Position;
+            public string Text = "", ContentSignature = "";
+            public SignParameters[]? Parts;
+            private PartContent[]? content;
+            public ObservedRoot(GameObject root, int id, int index, string text)
+            {
+                Root = root; Id = id; Index = index;
+                Position = root.transform.position - WorldMover.currentMove;
+                ReadContent(text);
+            }
+            public bool Refresh() => ReadContent(Root.GetComponent<SignDebug>()?.text ?? "");
+            private bool ReadContent(string text)
+            {
+                var data = Root.GetComponent<SignGeneratorData>();
+                var parts = data != null ? data.signParameters : null;
+                if (parts == null && content == null && Text == text) return false;
+                if (parts != null && content != null && parts.Length == content.Length)
+                {
+                    var same = true;
+                    for (var i = 0; i < parts.Length && same; i++) same = content[i].Matches(parts[i]);
+                    if (same) return false;
+                }
+                Parts = parts; Text = text;
+                content = parts?.Select(part => new PartContent(part)).ToArray();
+                ContentSignature = parts != null ? Signature(parts) : text;
+                return true;
+            }
+        }
+        private sealed class PartContent
+        {
+            private readonly int type, prefab;
+            private readonly string text;
+            private readonly int[] accessories;
+            public PartContent(SignParameters part)
+            {
+                type = (int)part.type; text = part.signText;
+                prefab = Identity(part.sign);
+                accessories = (part.accessories ?? Array.Empty<GameObject>()).Select(Identity).ToArray();
+            }
+            public bool Matches(SignParameters part)
+            {
+                if (type != (int)part.type || text != part.signText || prefab != Identity(part.sign)) return false;
+                var values = part.accessories ?? Array.Empty<GameObject>();
+                if (values.Length != accessories.Length) return false;
+                for (var i = 0; i < values.Length; i++) if (accessories[i] != Identity(values[i])) return false;
+                return true;
+            }
+            private static int Identity(UnityEngine.Object? value) => value != null ? value.GetInstanceID() : 0;
         }
         private sealed class PlanCounts { public int Matched, Unmatched; }
         private readonly struct Cell : IEquatable<Cell>

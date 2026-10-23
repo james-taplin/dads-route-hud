@@ -30,10 +30,11 @@ The collector reads native geometry and sign metadata without adding sign collid
 
 ## Candidate status
 
-Candidate **0.5.2** makes the route list readable and fully scrollable, names junction destinations
-from native track connections, and supports DoubleTrack's separate speed/grade sign placer.
-Exact captured sign anchors also survive later pole-clearance adjustments. It retains the 0.5.1
-passenger-task freeze fix, graph, window settings and other refactor changes. See
+Candidate **0.5.3** removes recurring whole-scene sign discovery and unchanged sign-cache flushes.
+Supported placement notifications retain new signs; bounded maintenance checks existing roots.
+Logging includes five-second inclusive stage timings for the next stationary performance test.
+It retains the readable complete list, station destinations, DoubleTrack signs, passenger-task
+freeze fix, graph, window settings and other refactor changes. See
 [the handover](docs/HANDOVER.md) for evidence, independent review, exact checks and runtime acceptance
 still required. No runtime dependencies were added; optional mods remain optional.
 Contributors can run `./Validate.ps1 -GamePath '<game path>'` for the complete local checks;

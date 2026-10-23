@@ -88,9 +88,10 @@ namespace DvMod.HeadsUpDisplay
 
         public static void Update(TrainCar? car)
         {
+            var timing = HudTimings.Measure(HudTimingStage.RouteUpdate);
             try
             {
-                NativeJunctionNames.Update();
+                using (HudTimings.Measure(HudTimingStage.JunctionNames)) NativeJunctionNames.Update();
                 car = DrivenCar(car);
                 if (!TryAnchor(car, out var track, out var span, out var forward, out var vehicleForward))
                 {
@@ -103,9 +104,11 @@ namespace DvMod.HeadsUpDisplay
                 if (AdvanceCapture()) located = false;
                 if (retained != null)
                 {
-                    OptionalSignalTelemetry.Update(car, retained.Intervals, retained.Revision);
+                    using (HudTimings.Measure(HudTimingStage.OptionalSignals))
+                        OptionalSignalTelemetry.Update(car, retained.Intervals, retained.Revision);
                     if (Time.realtimeSinceStartup >= nextPublish)
-                        PublishRetained(track, span, forward, located, position);
+                        using (HudTimings.Measure(HudTimingStage.RoutePublish))
+                            PublishRetained(track, span, forward, located, position);
                 }
                 else if (walk != null && Time.realtimeSinceStartup >= nextPublish)
                     PublishCollecting(track, span, forward);
@@ -114,6 +117,7 @@ namespace DvMod.HeadsUpDisplay
             {
                 FailCapture(exception);
             }
+            finally { timing.Dispose(); }
         }
 
         private static bool ScheduleCapture(TrainCar car, RailTrack track, double span, bool forward,
@@ -173,7 +177,7 @@ namespace DvMod.HeadsUpDisplay
         {
             frameTimer.Restart();
             while (walk != null && !walk.IsComplete && frameTimer.Elapsed.TotalMilliseconds < 2)
-                walk.Step(16);
+                using (HudTimings.Measure(HudTimingStage.RouteWalk)) walk.Step(16);
             if (walk != null && walk.IsComplete && collection == null)
             {
                 collectionIntervals = IncludeStartBoundary(walk.Intervals);
@@ -181,10 +185,11 @@ namespace DvMod.HeadsUpDisplay
             }
             while (collection != null && frameTimer.Elapsed.TotalMilliseconds < 2)
             {
-                if (collection.MoveNext()) continue;
+                using (HudTimings.Measure(HudTimingStage.RouteCollectStep))
+                    if (collection.MoveNext()) continue;
                 collection.Dispose();
                 collection = null;
-                FinishCapture();
+                using (HudTimings.Measure(HudTimingStage.RouteFinish)) FinishCapture();
                 return true;
             }
             return false;
@@ -215,13 +220,15 @@ namespace DvMod.HeadsUpDisplay
                 }
                 else
                 {
-                    selected = display.Select(MergeOptional(source), false);
+                    using (HudTimings.Measure(HudTimingStage.RouteMerge))
+                        selected = display.Select(MergeOptional(source), false);
                     signalPublicationPending = false;
                     displayOffset = position;
                     displayedSignalSource = OptionalSignalTelemetry.ActiveSignalSource;
                     displayedTrafficSource = OptionalSignalTelemetry.ActiveTrafficSource;
                 }
-                Current = RouteSnapshotView.Shift(selected, displayOffset);
+                using (HudTimings.Measure(HudTimingStage.RouteShift))
+                    Current = RouteSnapshotView.Shift(selected, displayOffset);
                 LogPublication(hold);
             }
             else if (source.Intervals.Count == 0) Current = MergeOptional(source);
@@ -363,15 +370,15 @@ namespace DvMod.HeadsUpDisplay
                 }
 
                 // Geometry samples are a profile, separate from the retained physical sign events.
-                AddProfile(interval, interval.StartDistance);
+                using (HudTimings.Measure(HudTimingStage.RouteProfile)) AddProfile(interval, interval.StartDistance);
                 yield return 0;
                 for (var distance = (Math.Floor(interval.StartDistance / 25) + 1) * 25;
                     distance < interval.EndDistance; distance += 25)
                 {
-                    AddProfile(interval, distance);
+                    using (HudTimings.Measure(HudTimingStage.RouteProfile)) AddProfile(interval, distance);
                     yield return 0;
                 }
-                AddProfile(interval, interval.EndDistance);
+                using (HudTimings.Measure(HudTimingStage.RouteProfile)) AddProfile(interval, interval.EndDistance);
                 yield return 0;
 
                 var pointSet = interval.Track.GetKinkedPointSet();

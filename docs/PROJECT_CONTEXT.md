@@ -1,6 +1,6 @@
 # Project context
 
-Dad's Route HUD 0.5.2 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
+Dad's Route HUD 0.5.3 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
 
 The public source branch starts at original MIT revision 9acf926a2d7c8512ddb85cbf637b3e4a9bfa6f6f and imports the current fork source in one commit. The local development lineage includes Koteq b09fe942ab5118e6aa348a153f686a537a483d0d and Dad's Driving HUD. Koteq's compatibility contributions are retained and credited, but its old committed game DLLs are excluded by not importing that commit's history. QuantitiesNet is pinned at 2b6522cb70df8108af0d96dec6ebdc6c35a673aa. See LICENSING.md and CREDITS.md.
 
@@ -52,6 +52,15 @@ enablement. Captured anchors survive later Toolbox clearance moves of the visibl
 track guessing or static DoubleTrack dependency is introduced. The known unplaced signal-controller
 population includes terminal buffer lamps with no native placement; their source limitation remains
 explicit rather than fabricating positions.
+
+Version 0.5.3 addresses the measured collector-stall investigation without reducing look-ahead or
+observations. Initial/optional-availability discovery remains synchronous, but repeated unchanged
+five-second scans are removed. Existing placement observers add future native/DoubleTrack roots;
+known roots and tracks are refreshed in bounded batches, with only affected caches invalidated.
+Origin-relative spatial indexing survives world shifts. HUD logging now records inclusive stage
+maxima, totals, call counts and over-2-ms counts once per five seconds; sampling itself has no
+allocations or file writes. The measured 0.5.1 collector stall is confirmed; its exact leaf split
+and 0.5.3 stationary improvement require a fresh game run. The 20 km test range is preserved.
 
 
 ## Track-ahead clarity update

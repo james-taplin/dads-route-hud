@@ -11,6 +11,36 @@ namespace HarmonyLib
     [AttributeUsage(AttributeTargets.Method)] public sealed class HarmonyPostfix : Attribute { }
     [AttributeUsage(AttributeTargets.Method)] public sealed class HarmonyPriority : Attribute { public HarmonyPriority(int priority) { } }
     public static class Priority { public const int Last = 0; }
+    public sealed class HarmonyMethod
+    {
+        public readonly System.Reflection.MethodInfo method;
+        public int priority;
+        public HarmonyMethod(System.Reflection.MethodInfo method) => this.method = method;
+    }
+    public sealed class Patch
+    {
+        public readonly string owner;
+        public readonly System.Reflection.MethodInfo PatchMethod;
+        public Patch(string owner, System.Reflection.MethodInfo method) { this.owner = owner; PatchMethod = method; }
+    }
+    public sealed class Patches { public readonly List<Patch> Postfixes = new List<Patch>(); }
+    public sealed class Harmony
+    {
+        private static readonly Dictionary<System.Reflection.MethodBase, Patches> patches = new Dictionary<System.Reflection.MethodBase, Patches>();
+        private readonly string owner;
+        public static int PatchCalls;
+        public Harmony(string owner) => this.owner = owner;
+        public static Patches? GetPatchInfo(System.Reflection.MethodBase method) => patches.TryGetValue(method, out var value) ? value : null;
+        public void Patch(System.Reflection.MethodBase method, HarmonyMethod? postfix = null)
+        {
+            PatchCalls++;
+            if (!patches.TryGetValue(method, out var value)) patches[method] = value = new Patches();
+            if (postfix != null) value.Postfixes.Add(new Patch(owner, postfix.method));
+        }
+        public static void InvokePostfixes(System.Reflection.MethodBase method, object instance, object data, UnityEngine.GameObject root)
+        { if (patches.TryGetValue(method, out var value)) foreach (var patch in value.Postfixes) patch.PatchMethod.Invoke(null, new[] { instance, data, root }); }
+        public static void Reset() { patches.Clear(); PatchCalls = 0; }
+    }
 }
 namespace UnityEngine
 {
@@ -19,13 +49,16 @@ namespace UnityEngine
         private static int nextId;
         private static readonly List<Object> scene = new List<Object>();
         private readonly int id = ++nextId;
+        public static int FindCalls, ComponentReads;
         public Object() => scene.Add(this);
         public bool Destroyed;
         public string name = "Test object";
         public int GetInstanceID() => id;
-        public static T[] FindObjectsOfType<T>() where T : Object => scene.OfType<T>().Where(value => value != null).ToArray();
-        public static Object[] FindObjectsOfType(Type type) => scene.Where(value => type.IsInstanceOfType(value) && value != null).ToArray();
-        public static void ClearScene() => scene.Clear();
+        public static T[] FindObjectsOfType<T>() where T : Object
+        { FindCalls++; return scene.OfType<T>().Where(value => value != null).ToArray(); }
+        public static Object[] FindObjectsOfType(Type type)
+        { FindCalls++; return scene.Where(value => type.IsInstanceOfType(value) && value != null).ToArray(); }
+        public static void ClearScene() { scene.Clear(); FindCalls = ComponentReads = 0; }
         public static bool operator ==(Object? a, Object? b)
         {
             var absentA = a is null || a.Destroyed;
@@ -42,6 +75,7 @@ namespace UnityEngine
         public Transform transform => gameObject.transform;
         public T? GetComponent<T>() where T : Component => gameObject.GetComponent<T>();
     }
+    public class MonoBehaviour : Component { }
     public sealed class GameObject : Object
     {
         private readonly Dictionary<Type, Component> components = new Dictionary<Type, Component>();
@@ -49,7 +83,8 @@ namespace UnityEngine
         public GameObject(string objectName = "Test root") => name = objectName;
         public T Add<T>(T component) where T : Component
         { component.gameObject = this; components[typeof(T)] = component; return component; }
-        public T? GetComponent<T>() where T : Component => components.TryGetValue(typeof(T), out var value) ? (T)value : null;
+        public T? GetComponent<T>() where T : Component
+        { Object.ComponentReads++; return components.TryGetValue(typeof(T), out var value) && value != null ? (T)value : null; }
     }
     public sealed class Transform { public Vector3 position; public Quaternion rotation; }
     public struct Vector3 : IEquatable<Vector3>
@@ -99,6 +134,7 @@ namespace UnityModManagerNet
     }
 }
 public static class WorldMover { public static UnityEngine.Vector3 currentMove; }
+public sealed class BaseSign : UnityEngine.MonoBehaviour { }
 public sealed class RailTrack : UnityEngine.Component
 {
     private Action<RailTrack>? updated;
@@ -134,7 +170,7 @@ namespace DV.Signs
     {
         public SignType type;
         public string signText;
-        public UnityEngine.GameObject? sign;
+        public BaseSign? sign;
         public UnityEngine.GameObject[]? accessories;
     }
     public sealed class Sign : UnityEngine.Object
@@ -167,10 +203,10 @@ namespace DV.Signs
             private readonly bool flip;
             private readonly Sign sign;
             public SignData(RailTrack track, UnityEngine.Vector3 position, bool flipped, SignParameters[] parts)
-            { this.track = track; this.position = position; flip = flipped; sign = new Sign(parts); }
+            { this.track = track; this.position = position - WorldMover.currentMove; flip = flipped; sign = new Sign(parts); }
             public bool FlippedForTest => flip;
             public RailTrack GetTrack() => track;
-            public UnityEngine.Vector3 GetPosition() => position;
+            public UnityEngine.Vector3 GetPosition() => position + WorldMover.currentMove;
             public UnityEngine.Quaternion GetRotation() => default;
             public Sign GetSign() => sign;
         }
@@ -187,6 +223,8 @@ namespace DV.Signs
         public int RecipeCalls, PlacementCalls;
         public object AddPlan(RailTrack track, UnityEngine.Vector3 anchor, bool flip, SignParameters[] parts)
         { var data = new SignData(track, anchor, flip, parts); plans.Add(data); return data; }
+        public void ObservePlacementForTest(object data, UnityEngine.GameObject root)
+            => HarmonyLib.Harmony.InvokePostfixes(typeof(CustomSignPlacer).GetMethod("PlaceSign", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!, this, data, root);
         private static bool ShouldIncludeTrack(RailTrack track) => track != null;
         private IEnumerable GetTrackSigns(RailTrack track, bool reverse)
         { RecipeCalls++; return plans.Where(data => data.GetTrack() == track && data.FlippedForTest == reverse).ToArray(); }
@@ -200,10 +238,10 @@ namespace DV.Signs
             private readonly bool flip;
             private readonly Sign sign;
             public SignData(RailTrack track, UnityEngine.Vector3 anchor, bool flip, SignParameters[] parts)
-            { this.track = track; this.anchor = anchor; this.flip = flip; sign = new Sign(parts); }
+            { this.track = track; this.anchor = anchor - WorldMover.currentMove; this.flip = flip; sign = new Sign(parts); }
             public bool FlippedForTest => flip;
             public RailTrack GetTrack() => track;
-            public UnityEngine.Vector3 GetPosition() => anchor;
+            public UnityEngine.Vector3 GetPosition() => anchor + WorldMover.currentMove;
             public UnityEngine.Quaternion GetRotation() => default;
             public Sign GetSign() => sign;
         }

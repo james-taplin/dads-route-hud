@@ -280,6 +280,7 @@ namespace DvMod.HeadsUpDisplay
             if (ReferenceEquals(eventSnapshot, route) && eventCapturedWidth == innerWidth
                 && eventFontSize == fontSize && eventPadding == Styles.Padding
                 && eventFilterKey == filterKey && eventDistanceUnits == units) return;
+            using var timing = HudTimings.Measure(HudTimingStage.ListLayout);
             var visible = new List<RouteEvent>();
             var opposingHidden = 0;
             foreach (var item in route.Events)

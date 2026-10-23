@@ -76,7 +76,92 @@ internal static class RouteServiceProgram
         Check(!RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Replacement source cannot inherit the old source's signals");
         RouteMonitorService.Reset();
         CheckTopologyInvalidation();
-        Console.WriteLine(checks + " route-service lifecycle checks passed (native/optional test doubles; not game acceptance).");
+        var lifecycleChecks = checks;
+        CheckHudTimings();
+        Console.WriteLine(lifecycleChecks + " route-service lifecycle checks and " + (checks - lifecycleChecks)
+            + " HUD timing checks passed (native/optional test doubles; not game acceptance).");
+    }
+
+    private static bool HasTimingCalls(string? report, HudTimingStage stage, int calls)
+        => report != null && report.Split(';').Any(part => part.Contains(stage + " max=")
+            && part.Contains(" calls=" + calls + " "));
+
+    private static void CheckHudTimings()
+    {
+        // Use the real monotonic clock without sleeping; durations are deliberately
+        // unspecified, while report boundaries and call counts are deterministic.
+        HudTimings.Enabled = false;
+        HudTimings.Reset();
+        using (HudTimings.Measure(HudTimingStage.RouteUpdate)) { }
+        Check(HudTimings.TakeReport(100) == null, "Disabled logging does not record or produce a timing report");
+
+        HudTimings.Enabled = true;
+        using (HudTimings.Measure(HudTimingStage.RouteUpdate))
+            using (HudTimings.Measure(HudTimingStage.RouteCollectStep)) { }
+        using (HudTimings.Measure(HudTimingStage.RouteCollectStep)) { }
+        var report = HudTimings.TakeReport(100);
+        Check(report != null && report.Contains("inclusive; do not add"), "Nested timing reports explain their inclusive boundaries");
+        Check(HasTimingCalls(report, HudTimingStage.RouteUpdate, 1), "One parent call is aggregated independently of nested scopes");
+        Check(HasTimingCalls(report, HudTimingStage.RouteCollectStep, 2), "Repeated child calls are aggregated into one stage row");
+
+        using (HudTimings.Measure(HudTimingStage.RouteUpdate)) { }
+        Check(HudTimings.TakeReport(104.999) == null, "Reports are throttled throughout the five-second interval");
+        report = HudTimings.TakeReport(105);
+        Check(HasTimingCalls(report, HudTimingStage.RouteUpdate, 1), "The next report contains calls retained during the throttle interval");
+        Check(report != null && !report.Contains(HudTimingStage.RouteCollectStep + " max="), "Already reported calls do not leak into the next aggregate");
+        Check(HudTimings.TakeReport(105) == null, "Repeated report requests at the same timestamp remain throttled");
+        Check(HudTimings.TakeReport(110) == null, "An empty timing interval produces no log message");
+
+        try
+        {
+            using (HudTimings.Measure(HudTimingStage.SignBootstrap))
+                throw new InvalidOperationException("Expected timing scope failure");
+        }
+        catch (InvalidOperationException) { }
+        Check(HasTimingCalls(HudTimings.TakeReport(115), HudTimingStage.SignBootstrap, 1),
+            "A failing native operation is still timed when its scope unwinds");
+
+        using (HudTimings.Measure(HudTimingStage.SignMaintenance)) { }
+        HudTimings.Enabled = false;
+        Check(HudTimings.TakeReport(116) == null, "Disabling logging discards a pending aggregate");
+        HudTimings.Enabled = true;
+        using (HudTimings.Measure(HudTimingStage.RouteUpdate)) { }
+        report = HudTimings.TakeReport(116);
+        Check(HasTimingCalls(report, HudTimingStage.RouteUpdate, 1), "Re-enabled logging starts a fresh reporting interval");
+        Check(report != null && !report.Contains(HudTimingStage.SignMaintenance + " max="), "Disabled-period cleanup retires previous samples");
+
+        var disabledScope = HudTimings.Measure(HudTimingStage.SignProjection);
+        HudTimings.Enabled = false;
+        disabledScope.Dispose();
+        HudTimings.Enabled = true;
+        Check(HudTimings.TakeReport(122) == null, "An in-flight scope cannot record after logging was disabled");
+
+        var interruptedScope = HudTimings.Measure(HudTimingStage.SignProjection);
+        HudTimings.Enabled = false;
+        HudTimings.Enabled = true;
+        interruptedScope.Dispose();
+        Check(HudTimings.TakeReport(128) == null, "An off/on transition cannot resurrect an earlier in-flight scope");
+
+        var previousWorldScope = HudTimings.Measure(HudTimingStage.SignProjection);
+        HudTimings.Reset();
+        previousWorldScope.Dispose();
+        Check(HudTimings.TakeReport(129) == null, "Reset invalidates scopes from the previous world");
+        using (HudTimings.Measure(HudTimingStage.RouteUpdate)) { }
+        report = HudTimings.TakeReport(134);
+        Check(HasTimingCalls(report, HudTimingStage.RouteUpdate, 1)
+            && report != null && !report.Contains(HudTimingStage.SignProjection + " max="),
+            "The new world report contains only new measurements");
+
+        HudTimings.Reset();
+        using (HudTimings.Measure(HudTimingStage.RouteUpdate)) { }
+        Check(HudTimings.TakeReport(double.NaN) == null, "NaN timestamps cannot publish timing reports");
+        Check(HudTimings.TakeReport(double.PositiveInfinity) == null, "Positive infinity cannot advance the report deadline");
+        Check(HudTimings.TakeReport(double.NegativeInfinity) == null, "Negative infinity cannot advance the report deadline");
+        Check(HasTimingCalls(HudTimings.TakeReport(0), HudTimingStage.RouteUpdate, 1), "Invalid timestamps preserve pending measurements for the next valid boundary");
+        using (HudTimings.Measure(HudTimingStage.RouteUpdate)) { }
+        Check(HasTimingCalls(HudTimings.TakeReport(-1), HudTimingStage.RouteUpdate, 1), "A clock rewind starts a new interval instead of suppressing reports indefinitely");
+        HudTimings.Enabled = false;
+        HudTimings.Reset();
     }
 
     private static void CheckTopologyInvalidation()
