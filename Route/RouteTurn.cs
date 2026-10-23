@@ -57,6 +57,10 @@ namespace DvMod.HeadsUpDisplay
             }
         }
 
+        public static string Arrow(RouteTurnDirection direction)
+            => direction == RouteTurnDirection.Left ? "←" : direction == RouteTurnDirection.Right ? "→"
+                : direction == RouteTurnDirection.Ahead ? "↑" : "";
+
         /// <summary>The turn in words, for the row's description.</summary>
         public static string Word(RouteTurnDirection direction)
         {

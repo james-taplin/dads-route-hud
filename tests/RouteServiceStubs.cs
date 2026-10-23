@@ -74,6 +74,8 @@ namespace DvMod.HeadsUpDisplay
     }
     public static class NativeRouteGeometry
     {
+        public static bool TryJunctionHeading(RailTrack track, bool forward, out double x, out double z)
+            => TryHeading(track, forward, false, out x, out z);
         public static bool TrySample(RailTrack track, double span, bool forward, out double elevation, out double grade)
         { elevation = grade = 0; return true; }
         public static bool TryHeading(RailTrack track, bool forward, bool end, out double x, out double z)
@@ -90,8 +92,12 @@ namespace DvMod.HeadsUpDisplay
         public static void Reset() { }
         public static void Update() { }
         public static string Describe(Junction junction, RailTrack approachTrack, bool trailing,
-            bool setForRoute, RouteTurnDirection turn) => RouteNaming.SwitchText("", junction.name,
+            bool setForRoute, out RouteTurnDirection turn, bool approachForward = true)
+        {
+            turn = RouteTurnDirection.Unknown;
+            return RouteNaming.SwitchText("", junction.name,
                 junction.selectedBranch, junction.outBranches?.Count ?? 0, trailing, setForRoute, turn);
+        }
     }
     public sealed class NativeRouteSign
     {
@@ -129,7 +135,8 @@ namespace DvMod.HeadsUpDisplay
         public static bool IsAvailable => ActiveSignalSource != null;
         public static bool IsReading => remaining > 0;
         public static bool IsComplete => !IsReading && !PartialSample;
-        public static string Status => IsReading ? "Reading optional signals; observations partial" : "Test sample ready";
+        public static string Status => IsReading ? "Reading optional signals; observations partial"
+            : PartialSample ? "Optional signals partial (1 diagnostics)" : "Test sample ready";
         public static IReadOnlyList<string> Diagnostics => PartialSample ? new[] { "Test unassociated controller" } : Array.Empty<string>();
         public static IReadOnlyList<SignalTrackEvent> UpcomingSignals { get; private set; } = Array.Empty<SignalTrackEvent>();
         public static string GetTrackReservation(RailTrack track) => "";

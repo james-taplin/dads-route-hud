@@ -7,8 +7,9 @@ One HUD with compact columns or a horizontal driving strip, selected in UMM. Bot
 - Choose Driving strip or Compact columns; choose Route graph, Route event list, or Graph + events.
 - Click **Detach route** in the HUD header to move the graph into its own window. Click **Attach** in that window (or **Attach route** in the HUD) to return it. Header actions stay visible while scrolling and remain usable with geometry locked. Use the native free cursor for these controls.
 - UMM also provides an **Attached to HUD / Detached window** selector, visibility, collection range (100–50,000 m), profile height and displayed content.
-- The route list scrolls through every matching event, with wrapped, bold colour-coded names and no page-size limit. Station tracks use the game's station names; mainline junctions show connected station destinations and the selected branch. Unresolved destinations remain explicit.
-- Show/hide tracks, junctions, speed/grade signs, signals, other signs and opposing observations. Hidden counts and incomplete coverage are stated beside the list; all observations remain in the complete UMM catalogue.
+- The route list scrolls through every matching event, with wrapped, bold colour-coded names and no page-size limit. Station tracks use the game's station names; junctions show the nearest next station per branch, travel-relative arrows and [set] on the selected branch. Unresolved destinations remain explicit.
+- Job/loco/consist details sit above the events. Coverage, refresh messages and hidden counts overlay a fixed black panel at the bottom, so status changes cannot move the list. The distance column also keeps a stable width as distances count down.
+- Show/hide tracks, junctions, speed/grade signs, signals, other signs and opposing observations. All observations remain in the complete UMM catalogue.
 - Choose separate background and text/graphics opacity for each window. Metric selection/order/units and train details remain configurable.
 - With the native game cursor available, drag a header or its lower-right grip. Both windows scroll when content exceeds the chosen size. UMM also provides explicit size fields and an optional geometry lock.
 - The main HUD starts at the actual screen's top right with a 10px margin. Geometry is remembered after dragging/resizing. Reset windows restores the default top-right placement; the separate graph starts below where space permits.
@@ -30,7 +31,13 @@ The collector reads native geometry and sign metadata without adding sign collid
 
 ## Candidate status
 
-Candidate **0.5.3** removes recurring whole-scene sign discovery and unchanged sign-cache flushes.
+Candidate **0.5.4** stabilizes the event-list layout, retains known partial signal coverage during
+refresh, moves train details above events and maps each junction branch to one nearest next station.
+Arrows use native geometry relative to travel; very gentle turns within three degrees read as ahead.
+In-station searches skip the current yard. Full event retention, settings and the 20 km test range
+are preserved. Game visual/performance acceptance remains pending.
+
+The retained **0.5.3** changes remove recurring whole-scene sign discovery and unchanged sign-cache flushes.
 Supported placement notifications retain new signs; bounded maintenance checks existing roots.
 Logging includes five-second inclusive stage timings for the next stationary performance test.
 It retains the readable complete list, station destinations, DoubleTrack signs, passenger-task

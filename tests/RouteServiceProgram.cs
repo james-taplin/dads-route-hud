@@ -38,6 +38,7 @@ internal static class RouteServiceProgram
         // and must not inherit the old capture's 10-metre offset on its completion frame.
         Frame(car, 3.2f, 20);
         Check(RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Same-route reading retains signal rows");
+        Check(RouteMonitorService.Current.SignalCoverage.Contains("partial"), "Same-route replacement retains the previous sample's partial coverage warning");
         Frame(car, 3.5f, 20.1);
         Check(OptionalSignalTelemetry.ResetCount == resets, "New capture uses its own origin; motion must not reset optional telemetry");
         Frame(car, 3.8f, 20.2);
@@ -69,6 +70,7 @@ internal static class RouteServiceProgram
         {
             Frame(car, 16.2f + i * 0.3f, 46);
             Check(RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Stationary refresh retains signals even with partial coverage diagnostics");
+            Check(RouteMonitorService.Current.SignalCoverage.Contains("partial"), "Stationary refresh never clears the known partial signal coverage warning");
         }
         // A source replacement during a read must not borrow the old source's facts.
         OptionalSignalTelemetry.ActiveSignalSource = new object();

@@ -136,6 +136,28 @@ namespace DvMod.HeadsUpDisplay
             return false;
         }
 
+        /// <summary>Look into the branch curve: its initial tangent can match the straight route.</summary>
+        public static bool TryJunctionHeading(RailTrack track, bool forward, out double x, out double z)
+        {
+            x = z = 0;
+            if (track == null) return false;
+            var points = track.GetKinkedPointSet();
+            if (!Usable(points)) return false;
+            var target = forward ? Math.Min(30, points.span) : Math.Max(0, points.span - 30);
+            var index = SegmentAt(points.points, target, forward);
+            var start = points.points[index];
+            var end = points.points[index + 1];
+            var length = end.span - start.span;
+            if (!Finite(length) || length <= 0) return false;
+            var fraction = (target - start.span) / length;
+            var anchor = points.points[forward ? 0 : points.points.Length - 1].position;
+            if (!Finite(fraction) || fraction < 0 || fraction > 1 || !Finite(start.position)
+                || !Finite(end.position) || !Finite(anchor)) return false;
+            x = start.position.x + (end.position.x - start.position.x) * fraction - anchor.x;
+            z = start.position.z + (end.position.z - start.position.z) * fraction - anchor.z;
+            return Finite(x) && Finite(z) && (x != 0 || z != 0);
+        }
+
         private static void Refine(EquiPointSet.Point[] points, int index, double x, double y, double z,
             ref double bestDistance, ref double bestSpan)
         {

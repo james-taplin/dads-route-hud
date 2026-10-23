@@ -76,12 +76,19 @@ internal static class RouteCoreProgram
             "Incomplete source coverage warns that apparent gaps can omit speed limits and grades");
         Check(RouteListText.CoverageWarning("Observed native signs; 0 unmatched plans").Length == 0,
             "A successful source report is not falsely marked partial");
-        Check(RouteListText.SignalCoverageWarning("Optional signals partial (100 diagnostics)").Contains("Signal coverage incomplete")
-            && RouteListText.SignalCoverageWarning("DVSignals not active; optional facts unavailable").Contains("Signal coverage unavailable")
+        Check(RouteListText.SignalCoverageWarning("Optional signals partial (100 diagnostics)").Contains("Signals: partial coverage")
+            && RouteListText.SignalCoverageWarning("DVSignals not active; optional facts unavailable").Contains("Signals: unavailable")
             && RouteListText.SignalCoverageWarning("Optional signal data not sampled").Length > 0,
             "Missing or partial signal placements get a separate explicit coverage warning");
         Check(RouteListText.SignalCoverageWarning("Signal placements read; aspect update age unverified").Length == 0,
             "Unverified aspect age alone does not claim missing signal placements");
+        Check(RouteListText.SignalCoverageWarning("Refreshing optional signals; previous sample retained; coverage partial")
+                == RouteListText.SignalCoverageWarning("Optional signals partial (4 diagnostics)"),
+            "A known partial sample keeps the same concise warning during its refresh");
+        Check(RouteListText.Description(new RouteEvent("switch", 20, RouteEventKind.Junction,
+                "Junction · → towards Sawmill [set]; ← towards Harbour", marker: RouteTurn.RightMarker))
+                .StartsWith("<color=#D7B1FF><b>Junction · → towards Sawmill"),
+            "Per-branch arrows have no duplicate selected-turn arrow before the junction name");
         Check(RouteListText.Termination(RouteWalkTermination.EndOfTrack) == "end of selected route"
             && RouteListText.Termination(RouteWalkTermination.LoopClosed) == "route loops here"
             && RouteListText.Termination(RouteWalkTermination.HorizonReached) == "end of captured range",

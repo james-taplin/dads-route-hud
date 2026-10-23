@@ -13,6 +13,7 @@ namespace DvMod.HeadsUpDisplay
         private Vector2 startMouse;
         private Rect startRect;
         private Rect frameRect;
+        private Rect bodyRect;
         private Vector2 scroll;
         private float bodyHeight;
         public float VisibleContentTop => scroll.y;
@@ -36,16 +37,36 @@ namespace DvMod.HeadsUpDisplay
             if (OwnsInput) GUIUtility.hotControl = 0;
             control = 0;
         }
+        /// <summary>Paint-only status panel, anchored to the viewport rather than its scroll content.</summary>
+        public void DrawFooter(string[] lines, float lineHeight, float content)
+        {
+            if (Event.current.type != EventType.Repaint) return;
+            var pad = Styles.Padding;
+            var height = Mathf.Min(bodyRect.height, lines.Length * lineHeight + pad * 2);
+            // Leave the existing scrollbar and corner grip visible and usable.
+            var footer = new Rect(bodyRect.x, bodyRect.yMax - height, Mathf.Max(1, bodyRect.width - 22), height);
+            var savedColor = GUI.color;
+            GUI.BeginGroup(footer);
+            try
+            {
+                GUI.color = Color.black;
+                GUI.DrawTexture(new Rect(0, 0, footer.width, footer.height), Texture2D.whiteTexture);
+                GUI.color = new Color(1, 1, 1, content);
+                for (var index = 0; index < lines.Length; index++)
+                    GUI.Label(new Rect(pad, pad + index * lineHeight, Mathf.Max(1, footer.width - pad * 2), lineHeight),
+                        lines[index], Styles.richText);
+            }
+            finally { GUI.EndGroup(); GUI.color = savedColor; }
+        }
         /// <summary>
         /// Draws the window. Header actions are optional: a detached window carries none, so every
         /// attach and detach control stays together on the main window.
         /// </summary>
         public void Draw(ref Rect savedRect, string title, float background, float content,
             bool locked, bool allowStart, Action drawContent, string actionLabel = "",
-            Action? headerAction = null, string secondActionLabel = "", Action? secondAction = null)
+            Action? headerAction = null, string secondActionLabel = "", Action? secondAction = null,
+            float minimumBodyHeight = 0)
         {
-            savedRect = Clamp(savedRect);
-            if (Event.current.type == EventType.Layout) frameRect = savedRect;
             if (string.IsNullOrEmpty(actionLabel) && !string.IsNullOrEmpty(secondActionLabel))
             {
                 actionLabel = secondActionLabel; headerAction = secondAction ?? headerAction; secondActionLabel = "";
@@ -57,6 +78,10 @@ namespace DvMod.HeadsUpDisplay
             var secondRow = !string.IsNullOrEmpty(secondActionLabel);
             var titleHeight = headerHeight;
             if (secondRow) headerHeight += titleHeight;
+            // A fixed footer must still leave room to read events at the smallest window size.
+            savedRect.height = Mathf.Max(savedRect.height, headerHeight + pad * 2 + minimumBodyHeight);
+            savedRect = Clamp(savedRect);
+            if (Event.current.type == EventType.Layout) frameRect = savedRect;
             // Widths follow the font, so a small font gives a small button rather than the
             // skin's default, and the title keeps whatever room is left.
             var fontSize = Styles.noWrapBold.fontSize;
@@ -129,7 +154,8 @@ namespace DvMod.HeadsUpDisplay
                 GUI.enabled = savedEnabled;
                 bodyHeight = Mathf.Max(1, frameRect.height - headerHeight - pad * 2);
                 var bodyWidth = Mathf.Max(1, frameRect.width - pad * 2);
-                GUILayout.BeginArea(new Rect(frameRect.x + pad, frameRect.y + headerHeight, bodyWidth, bodyHeight));
+                bodyRect = new Rect(frameRect.x + pad, frameRect.y + headerHeight, bodyWidth, bodyHeight);
+                GUILayout.BeginArea(bodyRect);
                 scroll = GUILayout.BeginScrollView(scroll, GUILayout.Width(bodyWidth), GUILayout.Height(bodyHeight));
                 drawContent();
                 GUILayout.EndScrollView();

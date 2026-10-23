@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../Providers/NativeRouteGeometry.cs" />
+    <Compile Include="../Route/RouteTurn.cs" />
     <Compile Include="../Route/RouteWalker.cs" />
     <Compile Include="NativeGeometryStubs.cs" />
     <Compile Include="NativeGeometryProgram.cs" />

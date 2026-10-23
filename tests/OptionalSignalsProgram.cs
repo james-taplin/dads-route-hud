@@ -154,6 +154,15 @@ internal static class OptionalSignalsProgram
             "Classifying terminal lamps does not hide uncertain route membership or claim complete coverage");
         Check(OptionalSignalTelemetry.UpcomingSignals.Count == 1 && OptionalSignalTelemetry.UpcomingSignals[0].Name == "retained mainline",
             "Unplaced controller classification preserves every correctly placed mainline observation");
+        manager.AllControllers = new SlowControllers(Controller(track, "updated sample"));
+        time += 1;
+        Frame(Route(track), 14);
+        Check(OptionalSignalTelemetry.IsReading && OptionalSignalTelemetry.Status.Contains("coverage partial")
+            && OptionalSignalTelemetry.Diagnostics.Count > 0,
+            "An ongoing same-source refresh retains the last completed sample's partial coverage status");
+        Complete(Route(track), 14);
+        Check(OptionalSignalTelemetry.Diagnostics.Count == 0 && !OptionalSignalTelemetry.Status.Contains("partial"),
+            "A newly completed complete sample clears the previous partial coverage status");
     }
 
     private static void SourceLifetimeAndCancellation()

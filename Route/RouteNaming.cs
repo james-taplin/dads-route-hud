@@ -115,37 +115,43 @@ namespace DvMod.HeadsUpDisplay
         }
 
         /// <summary>
-        /// Names native switch branches by their connected station destinations. Branch numbers
-        /// remain the fallback when destinations are not yet established; their order never implies
-        /// left or right. Callers supply actual graph results rather than nearby station guesses.
+        /// Names native switch branches by their nearest connected station destinations. Each
+        /// arrow comes from travel-relative geometry, never branch order. Missing evidence stays
+        /// explicit while the shared collector maps the native connections.
         /// </summary>
         public static string JunctionDestinations(string? stationName, int selectedBranch,
             string[] branchDestinations, bool trailing, bool setForRoute, string? onwardDestination,
-            RouteTurnDirection turn)
+            RouteTurnDirection turn, RouteTurnDirection[]? branchTurns = null)
         {
             var station = Trim(stationName);
             var head = station.Length > 0 ? station + " junction" : "Junction";
             if (trailing)
                 return head + " · trailing, " + (setForRoute ? "set for your route" : "set against you")
-                    + " · onward towards " + Destination(onwardDestination);
+                    + " · " + DirectedDestination(turn, onwardDestination);
             var text = new StringBuilder(head);
             if (selectedBranch >= 0 && selectedBranch < branchDestinations.Length)
             {
-                text.Append(" · set towards ").Append(Destination(branchDestinations[selectedBranch]));
-                var direction = RouteTurn.Word(turn);
-                if (direction.Length > 0) text.Append(" (").Append(direction).Append(')');
+                text.Append(" · ").Append(DirectedDestination(turn, branchDestinations[selectedBranch])).Append(" [set]");
             }
             else text.Append(" · selected branch unavailable");
             for (var branch = 0; branch < branchDestinations.Length; branch++)
             {
                 if (branch == selectedBranch) continue;
-                text.Append(" · branch ").Append((branch + 1).ToString(CultureInfo.InvariantCulture))
-                    .Append(" towards ").Append(Destination(branchDestinations[branch]));
+                var branchTurn = branchTurns != null && branch < branchTurns.Length
+                    ? branchTurns[branch] : RouteTurnDirection.Unknown;
+                text.Append("; ").Append(DirectedDestination(branchTurn, branchDestinations[branch]));
             }
             return text.ToString();
         }
 
         private static string Destination(string? value) => Trim(value).Length > 0 ? Trim(value) : "destination unknown";
+
+        private static string DirectedDestination(RouteTurnDirection turn, string? destination)
+        {
+            var arrow = RouteTurn.Arrow(turn);
+            return (arrow.Length > 0 ? arrow + " " : "") + "towards " + Destination(destination)
+                + (arrow.Length == 0 ? " (direction unknown)" : "");
+        }
 
         /// <summary>
         /// Describes a switch as "Goods Factory switch · branch 2 of 3". Branch numbers are

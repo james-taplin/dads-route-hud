@@ -1,9 +1,10 @@
 # Development status
 
-Latest test installation, 23 October 2026: 0.5.3 corrects recurring sign-index work on
-codex/route-hud-performance, based on 0.5.2 checkpoint fbe8a88. Settings and the 20 km range are
-preserved. James chose to test later; 0.5.3 runtime improvement remains unmeasured. The preserved
-handoff confirms a 0.5.1 collector stall, not a demonstrated hardware limit. See the final sections.
+Current candidate: 0.5.4 on codex/route-hud-junction-clarity, based on the installed 0.5.3
+checkpoint 11fe5bc. It stabilizes status/list layout, moves consist details above events and
+maps nearest next stations with travel-relative arrows. See the final sections for build/install
+evidence. The 20 km range and 0.5.3 performance corrections are preserved; runtime improvement
+remains unmeasured. The preserved handoff confirms a 0.5.1 collector stall, not a hardware limit.
 
 The 0.5.0 refactor was developed on codex/route-hud-refactor from the completed 0.4.2 checkpoint
 bb92b42, then installed at James's request. Older candidate status and acceptance notes below
@@ -721,3 +722,64 @@ HUD stage aggregates and coverage as described in VALIDATION.md. The initial/ava
 can still be synchronous; distinguish that from recurring warm stationary stalls.
 
 The validated ZIP is unchanged by this post-install/deferred-test source record. No push or release.
+
+## 0.5.4 stationary list layout and junction clarity
+
+James reported a missing-signal message appearing/disappearing about once per second, requested
+one nearest next station per junction branch with travel-relative throw arrows, and asked for
+job/loco/consist details above events. His final clarification requires all status messages to
+overlay the bottom of the list window on black so they cannot make the rows bump up and down.
+
+Confirmed source causes: OptionalSignalTelemetry replaced the known partial-coverage status with
+refresh activity, and the same-route replacement hold also discarded the previous signal coverage
+wording. Both retain partial status now, until the newly completed sample actually changes it.
+The event header previously used conditional/wrapped status labels, so message changes could move
+every row. Status, mapped coverage and filter counts now paint in a fixed four-line opaque black
+footer after the scroll view; they do not participate in GUILayout. A constant trailing spacer
+allows the last event to scroll clear. The footer leaves the scrollbar/grip visible and window
+minimum height reserves readable event space. The heading stays one fixed-height line. Distance
+column width follows format/horizon samples, avoiding rewrap when the widest event passes or
+distances count down. Actual route/aspect/consist changes can still alter the displayed content.
+
+NativeJunctionNames now visits tracks in rail-distance order and stops at one nearest named station
+per branch, rather than collecting all first-station alternatives beyond further forks. In a
+station, the approach yard's native identity is excluded so the destination is the next distinct
+station. Maps are cached per junction AND approach yard; opposite-direction encounters cannot
+cancel each other's searches. Existing native invalidation, directed loop guards and cooperative
+24-step/0.5 ms work with 4,096-node/50 km safeguards remain. Partial geometry gives nearest-known
+wording, never a claim of proven nearest/full coverage.
+
+Each branch arrow compares the approach travel heading with a chord up to 30 m into that branch's
+native kinked geometry. This observes divergence beyond a shared initial tangent. Reversing travel
+reverses left/right; branch array order is not directional evidence. The selected option carries
+[set], and label/graph marker share one resolved direction. Unknown headings remain explicit.
+The existing three-degree ahead threshold remains; very gentle turns and short connectors can
+read as ahead. No custom station-name table, dependency, scanner or event/horizon cap was added.
+
+Two agents independently reviewed UI and native mapping. Review caught/fixed small-window footer
+occlusion, scrollbar/grip overlap, a premature sign-sample availability claim, label/graph marker
+inconsistency and cancellation between approach-yard mappings. Added regressions cover same-source
+partial-status retention/clearing, repeated replacement holds, unequal track counts/distances,
+cheaper revisits, one station on a tie, branch reorder/reverse/unknown headings, in-station mapping
+and simultaneous approach yards. Actual curved forward/reverse geometry compiles from production
+source in the geometry suite. The game was not launched; visual and performance acceptance remain
+pending as described in VALIDATION.md. Settings, the 20 km range, sign/performance fixes and other
+prior changes remain in scope and are preserved.
+
+Full Validate.ps1 passes: zero game-reference compiler warnings/errors, 781 assertions across
+nine suites (14 driving, 271 route core, 88 service lifecycle + 22 timing, 102 native geometry,
+52 native names, 96 sign index, 58 optional signals, 33 car list, 45 telemetry), 64/64 metadata
+contracts, the 14-file package identity/reference audit, 12 isolated installer assertions and
+git diff --check. UI acceptance and a fresh stationary performance comparison remain pending;
+James launches the game when ready.
+
+0.5.4 installed with the game closed; all 14 package files verified. DLL assembly 0.5.4.0,
+208,384 bytes, SHA256 23A05E4F6ECD89F9BE48A4B4C2A3F974D0BD7922F64301216BFF874CD3C84281.
+ZIP SHA256 1A390A217AE5D6397D486FF3C99862370BE3FE2D535CA31DECCC73E33F3A7144.
+Verified prior mod/cache and Params.xml backup plus installation receipt:
+artifacts/backups/upgrade-0.5.4-83d37aab4e2649d08347380f0bee9013/.
+Settings.xml and UMM Params.xml remain byte-identical; 20,000 m range and logging retained,
+Route HUD enabled, Driving HUD disabled. HUD shadow caches backed up and cleared (zero remain).
+DVPerfProbe settings retain SHA256 883284597DD55031B2BB93388DE00C3CC22C1BC7F899F6BECEF76813235131CE.
+No graphics/FSR changes or game launch. This post-install record does not alter the audited ZIP.
+No push or release; next game visual/performance acceptance remains James's later test.

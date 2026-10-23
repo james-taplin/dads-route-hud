@@ -8,6 +8,7 @@ public sealed class RailTrack
     public Junction? inJunction, outJunction;
     public List<Junction.Branch>? In, Out;
     public double Length = 100;
+    public double HeadingX, HeadingZ = 1;
     public int ConnectionReads, GeometryReads;
     public bool Throw;
     public event Action<RailTrack>? TrackPointsUpdated;
@@ -46,3 +47,18 @@ public sealed class StationController
         => allStations?.Find(station => station.stationInfo?.YardID == yard);
 }
 public sealed class StationInfo { public string Name = "", YardID = ""; }
+
+namespace DvMod.HeadsUpDisplay
+{
+    internal static class NativeRouteGeometry
+    {
+        public static bool TryHeading(RailTrack track, bool forward, bool leaving, out double x, out double z)
+        {
+            x = track.HeadingX * (forward ? 1 : -1);
+            z = track.HeadingZ * (forward ? 1 : -1);
+            return x != 0 || z != 0;
+        }
+        public static bool TryJunctionHeading(RailTrack track, bool forward, out double x, out double z)
+            => TryHeading(track, forward, false, out x, out z);
+    }
+}

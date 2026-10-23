@@ -129,13 +129,14 @@ namespace DvMod.HeadsUpDisplay
             new List<(string, string, float)>();
         private Dictionary<string, (RouteEvent source, string description, float height)> eventRowCache =
             new Dictionary<string, (RouteEvent, string, float)>(StringComparer.Ordinal);
-        private Dictionary<string, float> eventDistanceWidths = new Dictionary<string, float>(StringComparer.Ordinal);
         private RouteListLayout eventListLayout = new RouteListLayout(Array.Empty<float>());
         private RouteSnapshot<RailTrack>? eventSnapshot;
         private float eventDistanceWidth, eventDescriptionWidth, eventCapturedWidth;
         private int eventFontSize, eventPadding, eventFilterKey;
         private Settings.TrackInfoSettings.EventDistanceUnits eventDistanceUnits;
-        private string eventHeading = "", eventFilters = "", eventCoverage = "", eventWarning = "";
+        private string eventHeading = "";
+        private readonly string[] eventFooter = { "", "", "", "" };
+        private float EventFooterHeight => eventFooter.Length * (fontSize + 6) + Styles.Padding * 2;
         private readonly Settings.TrainInfoSettings trainSettings = new Settings.TrainInfoSettings();
 
         public void Start()
@@ -156,7 +157,10 @@ namespace DvMod.HeadsUpDisplay
             {
                 var allowStart = mainWindow.OwnsInput || ((!showGraph || !graphRect.Contains(Event.current.mousePosition))
                     && (!showMetrics || !metricsRect.Contains(Event.current.mousePosition)));
-                mainWindow.Draw(ref mainRect, identity, background, content, locked, allowStart, drawMain, routeActionLabel, toggleRoute, metricsActionLabel, toggleMetrics);
+                mainWindow.Draw(ref mainRect, identity, background, content, locked, allowStart, drawMain,
+                    routeActionLabel, toggleRoute, metricsActionLabel, toggleMetrics,
+                    showEvents ? EventFooterHeight + (fontSize + 6) * 2 : 0);
+                if (showEvents) mainWindow.DrawFooter(eventFooter, fontSize + 6, content);
                 Main.settings.hudPosition = mainRect.position;
                 if (metricsDetached) Main.settings.detailsSize = mainRect.size;
                 else if (compact) Main.settings.compactSize = mainRect.size;
@@ -289,32 +293,33 @@ namespace DvMod.HeadsUpDisplay
                 else if (!item.AppliesToTravel && !layout.showOpposite) opposingHidden++;
             }
             var filtered = route.Events.Count - visible.Count - opposingHidden;
-            eventHeading = $"Route ahead · {visible.Count} events · scroll for all";
-            eventFilters = opposingHidden > 0 ? opposingHidden + " opposite-facing hidden" : "";
-            if (filtered > 0) eventFilters += (eventFilters.Length > 0 ? " · " : "") + filtered + " hidden by type filters";
-            eventCoverage = $"Mapped {RouteMonitor.EventDistance(route.ReachedDistance)} / {RouteMonitor.EventDistance(route.RequestedDistance)}"
+            eventHeading = $"Track events · {visible.Count}";
+            eventFooter[0] = $"Mapped {RouteMonitor.EventDistance(route.ReachedDistance)} / {RouteMonitor.EventDistance(route.RequestedDistance)}"
                 + " · " + RouteListText.Termination(route.Termination)
                 + (route.IsCollecting && route.Termination != RouteWalkTermination.InProgress ? " · refreshing" : "");
+            eventFooter[1] = visible.Count + " events · scroll for all"
+                + (opposingHidden > 0 ? " · " + opposingHidden + " opposing hidden" : "")
+                + (filtered > 0 ? " · " + filtered + " filtered" : "");
             var warning = RouteListText.CoverageWarning(route.EventCoverage);
             var signalWarning = RouteListText.SignalCoverageWarning(route.SignalCoverage);
-            if (signalWarning.Length > 0) warning += (warning.Length > 0 ? "\n" : "") + signalWarning;
-            eventWarning = warning.Length == 0 ? "" : "<color=#FFBD59><b>" + warning + "</b></color>";
+            // All collection messages paint over a fixed footer; none participate in list layout.
+            eventFooter[2] = warning.Length > 0 ? "<color=#FFBD59><b>Track signs: incomplete (see UMM)</b></color>" : "Track sign coverage: see UMM";
+            eventFooter[3] = signalWarning.Length > 0 ? "<color=#FFBD59><b>" + signalWarning + "</b></color>" : "Signals: sample available";
             eventRows.Clear();
             var sameFont = eventFontSize == fontSize;
-            var nextDistanceWidths = new Dictionary<string, float>(StringComparer.Ordinal);
-            eventDistanceWidth = Styles.TextWidth("0 m", Styles.routeDistance);
+            // Keep this column independent of the current rows and countdown. Otherwise losing
+            // the widest distance can rewrap every description and make a stationary list jump.
+            var distanceSample = RouteMonitor.EventDistance(route.RequestedDistance);
+            distanceSample = new string(distanceSample.Select(c => char.IsDigit(c) ? '8' : c).ToArray());
+            var shortSample = units == Settings.TrackInfoSettings.EventDistanceUnits.m ? "888.88 m"
+                : units == Settings.TrackInfoSettings.EventDistanceUnits.mi ? "88.88 mi" : "88.8 km";
+            eventDistanceWidth = Mathf.Max(Styles.TextWidth(distanceSample, Styles.routeDistance),
+                Styles.TextWidth(shortSample, Styles.routeDistance));
             foreach (var item in visible)
             {
                 var distance = RouteMonitor.EventDistance(item.Distance);
                 var unchanged = eventRowCache.TryGetValue(item.Id, out var cached) && RouteListText.SameDescription(cached.source, item);
                 eventRows.Add((distance, unchanged ? cached.description : RouteListText.Description(item), 0));
-                if (!nextDistanceWidths.TryGetValue(distance, out var width))
-                {
-                    if (!sameFont || !eventDistanceWidths.TryGetValue(distance, out width))
-                        width = Styles.TextWidth(distance, Styles.routeDistance);
-                    nextDistanceWidths[distance] = width;
-                }
-                eventDistanceWidth = Mathf.Max(eventDistanceWidth, width);
             }
             eventDistanceWidth = Mathf.Min(eventDistanceWidth, Mathf.Max(1, innerWidth - ColumnSpacing - 1));
             var descriptionWidth = Mathf.Max(1, innerWidth - eventDistanceWidth - ColumnSpacing);
@@ -335,7 +340,6 @@ namespace DvMod.HeadsUpDisplay
             }
             // Only this generation survives: passed or filtered events cannot accumulate in a history cache.
             eventRowCache = nextRowCache;
-            eventDistanceWidths = nextDistanceWidths;
             eventListLayout = new RouteListLayout(heights);
             eventSnapshot = route;
             eventCapturedWidth = innerWidth;
@@ -372,9 +376,14 @@ namespace DvMod.HeadsUpDisplay
         {
             if (dockMetrics) DrawMetrics();
             if (dockGraph) { GUILayout.Space(4); RouteMonitor.DrawPassive(); }
-            if (showEvents) DrawEvents();
             if (summary.Length > 0) { GUILayout.Space(4); GUILayout.Label(summary, Styles.noWrap, GUILayout.Width(innerWidth)); }
             if (drawCarList) CarList.DrawCarList();
+            if (showEvents)
+            {
+                DrawEvents();
+                // A constant tail lets the final event scroll clear of the overlay in every state.
+                GUILayout.Space(EventFooterHeight);
+            }
         }
         private void DrawMetrics()
         {
@@ -416,10 +425,7 @@ namespace DvMod.HeadsUpDisplay
         private void DrawEvents()
         {
             GUILayout.Space(4);
-            GUILayout.Label("<b>" + eventHeading + "</b>", Styles.routeText, GUILayout.Width(innerWidth));
-            if (eventFilters.Length > 0) GUILayout.Label(eventFilters, Styles.wrappedText, GUILayout.Width(innerWidth));
-            GUILayout.Label(eventCoverage, Styles.wrappedText, GUILayout.Width(innerWidth));
-            if (eventWarning.Length > 0) GUILayout.Label(eventWarning, Styles.routeText, GUILayout.Width(innerWidth));
+            GUILayout.Label(eventHeading, Styles.noWrapBold, GUILayout.Width(innerWidth));
             GUILayout.Space(4);
             // One passive area represents the complete list. Wrapped rows are frozen at Layout;
             // only rows inside the existing window's scroll viewport need repainting.

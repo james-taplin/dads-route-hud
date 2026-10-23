@@ -1,6 +1,6 @@
 # Project context
 
-Dad's Route HUD 0.5.3 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
+Dad's Route HUD 0.5.4 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
 
 The public source branch starts at original MIT revision 9acf926a2d7c8512ddb85cbf637b3e4a9bfa6f6f and imports the current fork source in one commit. The local development lineage includes Koteq b09fe942ab5118e6aa348a153f686a537a483d0d and Dad's Driving HUD. Koteq's compatibility contributions are retained and credited, but its old committed game DLLs are excluded by not importing that commit's history. QuantitiesNet is pinned at 2b6522cb70df8108af0d96dec6ebdc6c35a673aa. See LICENSING.md and CREDITS.md.
 
@@ -64,6 +64,23 @@ and 0.5.3 stationary improvement require a fresh game run. The 20 km test range 
 
 
 ## Track-ahead clarity update
+
+Version 0.5.4 moves job/loco/consist rows above the event list. Coverage, filter counts, refresh
+messages and warnings paint in a fixed four-line opaque black footer outside scroll-content
+layout. Its fixed tail space lets the final event scroll above it; the scrollbar/grip remain
+visible, and minimum window height accounts for the footer and readable event space. The heading
+is one fixed-height line; the distance column follows fixed format/horizon samples rather than
+the current widest row. Warning changes and distance countdowns therefore cannot reflow the list.
+Partial optional coverage remains stated while a same-source sample/replacement is being read.
+
+Junction destinations now use incremental distance-ordered native traversal, stopping at one
+nearest next station per physical branch rather than listing all downstream station alternatives.
+The approach station's native yard ID is excluded, so in-station switches can map the next distinct
+station. Existing directed loop protection, geometry invalidation, 24-step/0.5 ms update budget,
+4,096-node/50 km safeguards and explicit unknown/partial results remain. Arrows compare approach
+travel with a chord up to 30 m into each native branch; branch order never implies left/right.
+The existing three-degree ahead threshold remains; short connectors and very gentle divergence
+can read as ahead. The selected label and graph marker share the resolved direction.
 
 Version 0.2.1 adds a permanent HUD-header Detach route / Attach route action and an Attach action on the detached Track ahead window. Action hit areas are excluded from header dragging; geometry locking does not disable the action, and mouse/key input stays native when the game cursor is unavailable. Visibility changes apply at the next IMGUI Layout, with settings saved through the existing deferred path. No extra collector, toolbar integration, optional dependency or input binding is added.
 

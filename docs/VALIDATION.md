@@ -49,11 +49,31 @@ git diff --check
 ./tests/Install.Tests.ps1
 ```
 
-Expect zero build warnings/errors and 733 checks across nine suites: 14 driving, 269 route/layout/naming, 67 capture-service lifecycle plus 22 HUD timing, 90 native-geometry, 41 native station/destination, 96 production sign-index, 56 actual optional-adapter, 33 car-list and 45 telemetry/registry. The installer fixtures add 12 assertions and the PE contract audit matches 64/64 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
+Expect zero build warnings/errors and 781 checks across nine suites: 14 driving, 271 route/layout/naming, 88 capture-service lifecycle plus 22 HUD timing, 102 native-geometry, 52 native station/destination, 96 production sign-index, 58 actual optional-adapter, 33 car-list and 45 telemetry/registry. The installer fixtures add 12 assertions and the PE contract audit matches 64/64 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
+
+## 0.5.4 stable event list and nearest junction stations - runtime acceptance pending
+
+Confirm the loaded DLL/cache is 0.5.4. With the train stationary, watch several normal signal and
+route refreshes: coverage/status changes must stay inside the black bottom overlay without
+moving the event heading or rows. A known partial signal sample must keep its warning throughout
+refresh; a newly complete sample may clear it. Check no-locomotive and initial pending capture
+states, narrow/wide windows and fonts 10-28. The scrollbar and resize grip must remain visible;
+minimum window height should leave readable rows above the overlay. Scroll to the last event;
+it must clear the footer fully. Job/loco/consist details must be above track events. While moving,
+cross metre/kilometre thresholds and pass the widest-distance row: countdown width must not
+rewrap the remaining descriptions. Real event/aspect/consist changes can still change content.
+
+At mainline forks and in stations, compare each arrow with the physical throw relative to travel
+and check [set] follows native selection. Each branch should name just its nearest next distinct
+station by rail distance, never all downstream alternatives. Repeat in reverse travel and after
+a native geometry update; unknown/partial evidence must stay explicit. Very gentle turns within
+three degrees and short native connectors may read as ahead. These UI and physical comparisons
+are not established by compilation or native-boundary regression tests. Preserve the 20 km range
+for the performance comparison below; 0.5.4 retains the 0.5.3 performance changes and stage logging.
 
 ## 0.5.3 collector performance - stationary runtime comparison required
 
-Preserve the 20,000 m look-ahead and current event filters. After verifying the loaded 0.5.3 DLL/cache,
+Preserve the 20,000 m look-ahead and current event filters. After verifying the loaded current DLL/cache,
 use a fresh game session to avoid earlier broad-profiling history. Let the loaded scene settle,
 close UMM and hold the train at the same stationary position for at least 90 seconds. Keep existing
 HUD logging enabled. Read the `HUD timings (inclusive; do not add)` aggregates: HudUpdate,

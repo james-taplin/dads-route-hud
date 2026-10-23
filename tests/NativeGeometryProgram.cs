@@ -27,6 +27,7 @@ internal static class NativeGeometryProgram
     {
         Sampling();
         Headings();
+        JunctionHeadings();
         SelectedConnections();
         KnownTrackProjection();
         Console.WriteLine(checks + " native-geometry adapter checks passed (native boundary doubles; not game acceptance).");
@@ -124,6 +125,32 @@ internal static class NativeGeometryProgram
         Check(!graph.TryGetNext(outgoing, true, out _, out _), "Missing selected native connection remains a dead end");
         outgoing.Out = new RailTrack.Branch();
         Check(!graph.TryGetNext(outgoing, true, out _, out _), "Native branch with missing track is unavailable");
+    }
+
+    private static void JunctionHeadings()
+    {
+        var curved = Track((0, 0, 0, 0), (5, 0, 0, 5), (30, 4, 0, 29), (100, 20, 0, 90));
+        Check(NativeRouteGeometry.TryHeading(curved, true, false, out var x, out var z)
+            && RouteTurn.Classify(0, 1, x, z) == RouteTurnDirection.Ahead,
+            "A diverging track can start with the same tangent as the straight branch");
+        Check(NativeRouteGeometry.TryJunctionHeading(curved, true, out x, out z)
+            && RouteTurn.Classify(0, 1, x, z) == RouteTurnDirection.Right,
+            "Looking into native branch geometry identifies its right divergence beyond the shared tangent");
+        Near(x, 4, "Forward junction chord uses the 30 metre native span");
+        Near(z, 29, "Forward junction chord ends on the native segment");
+        var reversed = Track((0, 20, 0, 90), (70, 4, 0, 29), (95, 0, 0, 5), (100, 0, 0, 0));
+        Check(NativeRouteGeometry.TryJunctionHeading(reversed, false, out x, out z)
+            && RouteTurn.Classify(0, 1, x, z) == RouteTurnDirection.Right,
+            "A first=false branch's chord points away from its end into the same physical divergence");
+        Near(x, 4, "Reversed junction chord preserves horizontal x");
+        Near(z, 29, "Reversed junction chord preserves horizontal z");
+        Check(NativeRouteGeometry.TryJunctionHeading(Track((0, 0, 0, 0), (10, -2, 0, 9)), true, out x, out z)
+            && RouteTurn.Classify(0, 1, x, z) == RouteTurnDirection.Left,
+            "A branch shorter than 30 metres uses its actual endpoint");
+        Check(!NativeRouteGeometry.TryJunctionHeading(new RailTrack(), true, out _, out _), "Missing junction geometry is unavailable");
+        Check(!NativeRouteGeometry.TryJunctionHeading(Track((0, 0, 0, 0), (30, 0, 1, 0)), true, out _, out _), "A vertical chord has no horizontal arrow");
+        Check(!NativeRouteGeometry.TryJunctionHeading(Track((0, 0, 0, 0), (30, double.NaN, 0, 1)), true, out _, out _), "A nonfinite chord has no arrow");
+        Check(!NativeRouteGeometry.TryJunctionHeading(Track((0, 0, 0, 0), (0, 1, 0, 0)), true, out _, out _), "A zero-length branch has no arrow");
     }
 
     private static void KnownTrackProjection()

@@ -18,9 +18,12 @@ namespace DvMod.HeadsUpDisplay
             {
                 if (!string.IsNullOrWhiteSpace(item.Aspect)) text += " · " + Plain(item.Aspect);
             }
-            if (item.Marker == RouteTurn.LeftMarker) text = "← " + text;
-            else if (item.Marker == RouteTurn.RightMarker) text = "→ " + text;
-            else if (item.Marker == RouteTurn.AheadMarker) text = "↑ " + text;
+            if (item.Kind != RouteEventKind.Junction || (!label.Contains("←") && !label.Contains("→") && !label.Contains("↑")))
+            {
+                if (item.Marker == RouteTurn.LeftMarker) text = "← " + text;
+                else if (item.Marker == RouteTurn.RightMarker) text = "→ " + text;
+                else if (item.Marker == RouteTurn.AheadMarker) text = "↑ " + text;
+            }
             text = "<color=" + KindColor(item) + "><b>" + text + "</b></color>";
             // For signs Fact records provenance, raw text and prefab details, not a driving fact.
             if ((item.Kind == RouteEventKind.Signal || item.Kind == RouteEventKind.Track)
@@ -49,10 +52,12 @@ namespace DvMod.HeadsUpDisplay
         {
             if (coverage.IndexOf("unavailable", StringComparison.OrdinalIgnoreCase) >= 0
                 || coverage.IndexOf("not sampled", StringComparison.OrdinalIgnoreCase) >= 0)
-                return "Signal coverage unavailable · signals may be missing";
+                return "Signals: unavailable (see UMM)";
+            if (coverage.Length == 0 || coverage.IndexOf("pending", StringComparison.OrdinalIgnoreCase) >= 0)
+                return "Signals: awaiting sample";
             return coverage.IndexOf("partial", StringComparison.OrdinalIgnoreCase) >= 0
                 || coverage.IndexOf("uncertain", StringComparison.OrdinalIgnoreCase) >= 0
-                ? "Signal coverage incomplete · signals may be missing" : "";
+                ? "Signals: partial coverage (see UMM)" : "";
         }
 
         public static string Termination(RouteWalkTermination termination)

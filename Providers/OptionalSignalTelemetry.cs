@@ -107,6 +107,7 @@ namespace DvMod.HeadsUpDisplay
                 work = Collect(intervals, pass).GetEnumerator();
                 Status = managerType == null ? "DVSignals not active; optional facts unavailable"
                     : SampledAt > 0 ? "Refreshing optional signals; previous sample retained"
+                        + (diagnostics.Count > 0 ? "; coverage partial" : "")
                     : "Reading optional signals; observations partial";
             }
             frameTimer.Restart();
