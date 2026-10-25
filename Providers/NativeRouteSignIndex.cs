@@ -19,8 +19,12 @@ namespace DvMod.HeadsUpDisplay
         public RouteEventKind Kind { get; }
         public string Label { get; }
         public string Fact { get; }
-        internal NativeRouteSign(string sourceId, double span, bool forward, RouteEventKind kind, string label, string fact)
-        { SourceId = sourceId; Span = span; Forward = forward; Kind = kind; Label = label; Fact = fact; }
+        public double? SpeedLimitKph { get; }
+        public double? AlternateSpeedLimitKph { get; }
+        internal NativeRouteSign(string sourceId, double span, bool forward, RouteEventKind kind, string label, string fact,
+            double? speedLimitKph = null, double? alternateSpeedLimitKph = null)
+        { SourceId = sourceId; Span = span; Forward = forward; Kind = kind; Label = label; Fact = fact;
+            SpeedLimitKph = speedLimitKph; AlternateSpeedLimitKph = alternateSpeedLimitKph; }
     }
 
     /// <summary>
@@ -473,13 +477,15 @@ namespace DvMod.HeadsUpDisplay
                     : type.StartsWith("Grade", StringComparison.Ordinal) ? RouteEventKind.Grade : RouteEventKind.OtherSign;
                 var label = RouteNaming.Words(type)
                     + (string.IsNullOrWhiteSpace(part.signText) ? "" : " · " + part.signText);
-                if (kind == RouteEventKind.Speed && TryNumber(part.signText, out var limit))
-                    label = (limit * 10).ToString("0.###", CultureInfo.InvariantCulture) + " km/h";
-                else if (kind == RouteEventKind.Grade && TryNumber(part.signText, out var grade))
+                double? speed = null, alternate = null;
+                if (kind == RouteEventKind.Speed) RouteSpeed.ReadNative(type, part.signText ?? "", out speed, out alternate);
+                if (speed.HasValue)
+                    label = RouteSpeed.Number(speed.Value) + (alternate.HasValue ? "/" + RouteSpeed.Number(alternate.Value) : "") + " km/h";
+                else if (kind == RouteEventKind.Grade && TryNumber(part.signText ?? "", out var grade))
                     label = RouteNaming.GradeText(grade);
                 var fact = evidence + "; native type " + type + "; raw text: " + (part.signText ?? "<null>")
                     + "; prefab: " + (part.sign != null ? part.sign.name : "<unavailable>");
-                result.Add(new NativeRouteSign(identity + ":part:" + index, span, source.Forward, kind, label, fact));
+                result.Add(new NativeRouteSign(identity + ":part:" + index, span, source.Forward, kind, label, fact, speed, alternate));
                 if (part.accessories == null) continue;
                 for (var accessory = 0; accessory < part.accessories.Length; accessory++)
                 {

@@ -105,6 +105,7 @@ namespace DvMod.HeadsUpDisplay
         public string SourceId = "", Label = "", Fact = "";
         public RouteEventKind Kind;
         public bool Forward;
+        public double? SpeedLimitKph, AlternateSpeedLimitKph;
     }
     public static class NativeRouteSignIndex
     {

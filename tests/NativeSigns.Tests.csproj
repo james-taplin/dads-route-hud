@@ -10,6 +10,7 @@
     <Compile Include="../Providers/NativeRouteSignIndex.cs" />
     <Compile Include="../Providers/HudTimings.cs" />
     <Compile Include="../Route/RouteNaming.cs" />
+    <Compile Include="../Route/RouteSpeed.cs" />
     <Compile Include="../Route/RouteModels.cs" />
     <Compile Include="../Route/RouteWalker.cs" />
     <Compile Include="../Route/RouteTurn.cs" />

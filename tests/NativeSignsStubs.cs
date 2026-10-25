@@ -165,7 +165,7 @@ namespace DvMod.HeadsUpDisplay
 }
 namespace DV.Signs
 {
-    public enum SignType { SpeedLimit, Grade, WarningBoard }
+    public enum SignType { SpeedLimit, SpeedLimitDual, Grade, WarningBoard }
     public struct SignParameters
     {
         public SignType type;

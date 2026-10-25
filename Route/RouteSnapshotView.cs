@@ -23,7 +23,8 @@ namespace DvMod.HeadsUpDisplay
             {
                 var item = snapshot.Events[index];
                 events.Add(new RouteEvent(item.Id, item.Distance - offset, item.Kind, item.Label,
-                    item.Aspect, item.ColorHex, item.Fact, item.Freshness, item.AppliesToTravel, item.Code, item.Marker));
+                    item.Aspect, item.ColorHex, item.Fact, item.Freshness, item.AppliesToTravel, item.Code, item.Marker,
+                    item.SpeedLimitKph, item.AlternateSpeedLimitKph));
             }
 
             var intervals = new List<RouteInterval<TTrack>>();

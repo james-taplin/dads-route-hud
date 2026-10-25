@@ -22,10 +22,13 @@ namespace DvMod.HeadsUpDisplay
         public string Code { get; }
         /// <summary>A short fixed marker drawn ahead of the description, such as a switch's side.</summary>
         public string Marker { get; }
+        public double? SpeedLimitKph { get; }
+        public double? AlternateSpeedLimitKph { get; }
 
         public RouteEvent(string id, double distance, RouteEventKind kind, string label,
             string aspect = "", string colorHex = "", string fact = "", string freshness = "",
-            bool appliesToTravel = true, string code = "", string marker = "")
+            bool appliesToTravel = true, string code = "", string marker = "",
+            double? speedLimitKph = null, double? alternateSpeedLimitKph = null)
         {
             if (double.IsNaN(distance) || double.IsInfinity(distance) || distance < 0)
                 throw new ArgumentOutOfRangeException(nameof(distance));
@@ -40,6 +43,8 @@ namespace DvMod.HeadsUpDisplay
             AppliesToTravel = appliesToTravel;
             Code = code ?? "";
             Marker = marker ?? "";
+            SpeedLimitKph = speedLimitKph;
+            AlternateSpeedLimitKph = alternateSpeedLimitKph;
         }
     }
 

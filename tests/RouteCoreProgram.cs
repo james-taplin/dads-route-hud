@@ -43,8 +43,72 @@ internal static class RouteCoreProgram
         SwitchSides();
         StickyDirection();
         GroupedMetricColumns();
+        MapSpeedAndTraffic();
         SyntheticTiming();
         Console.WriteLine(checks + " route-core checks passed.");
+    }
+
+    private static void MapSpeedAndTraffic()
+    {
+        RouteSpeed.ReadNative("SpeedLimit", "8", out var speed, out var second);
+        Check(speed == 80 && second == null, "A native speed board supplies typed km/h without parsing its display label");
+        RouteSpeed.ReadNative("SpeedLimitDual", "4/6", out speed, out second);
+        Check(speed == 40 && second == 60, "Both native dual-board values convert from tens of km/h independently");
+        var originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+        try
+        {
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.GetCultureInfo("fr-FR");
+            RouteSpeed.ReadNative("SpeedLimit", "3,5", out speed, out second);
+            Check(speed == 35, "Native localized decimal board text retains the existing current-culture fallback");
+        }
+        finally { System.Globalization.CultureInfo.CurrentCulture = originalCulture; }
+        foreach (var raw in new[] { "", "unknown", "-3", "NaN", "Infinity", "4/bad", "1/2/3", "0" })
+        {
+            RouteSpeed.ReadNative("SpeedLimitDual", raw, out speed, out second);
+            Check(speed == null && second == null, "Malformed native board is not made into a numeric limit: " + raw);
+        }
+        Check(RouteSpeed.Compare(39, 40) == RouteSpeedState.WithinLimit && RouteSpeed.Compare(40, 40) == RouteSpeedState.WithinLimit,
+            "At or under each displayed limit is green");
+        Check(RouteSpeed.Compare(40.001, 40) == RouteSpeedState.SlightlyOver && RouteSpeed.Compare(45, 40) == RouteSpeedState.SlightlyOver,
+            "Any positive excess through exactly five km/h is yellow");
+        Check(RouteSpeed.Compare(45.001, 40) == RouteSpeedState.OverLimit, "More than five km/h over is red");
+        Check(RouteSpeed.Compare(double.NaN, 40) == RouteSpeedState.Unknown && RouteSpeed.Compare(null, 40) == RouteSpeedState.Unknown,
+            "Unavailable live speed has no invented comparison colour");
+        var board = new RouteEvent("dual", 100, RouteEventKind.Speed, "40/60 km/h", speedLimitKph: 40, alternateSpeedLimitKph: 60);
+        var snapshot = new RouteSnapshot<string>(1, 1000, 1000, RouteWalkTermination.HorizonReached,
+            Array.Empty<RouteInterval<string>>(), new[] { board }, Array.Empty<RouteProfilePoint>(), false, "", "");
+        var shifted = RouteSnapshotView.Shift(snapshot, 30).Events.Single();
+        Check(shifted.SpeedLimitKph == 40 && shifted.AlternateSpeedLimitKph == 60 && shifted.Distance == 70,
+            "Moving snapshots retain both typed speed-board values");
+        var dense = Enumerable.Range(0, 200).Select(i => new RouteEvent("s" + i, i, RouteEventKind.Speed,
+            "80 km/h", speedLimitKph: 80)).ToArray();
+        var labels = RouteMapLabels.Arrange(dense, 0, 1000, 100, 3, _ => 30);
+        Check(labels.Sum(p => 1 + p.Additional) == dense.Length, "Dense speed labels account for every board without text overlap or hidden count loss");
+        Check(labels.GroupBy(p => p.Lane).All(g => g.Zip(g.Skip(1), (a, b) => a.X + a.Width + 3 <= b.X).All(ok => ok)),
+            "Labels in each fixed lane never overlap");
+        Check(RouteMapLabels.Arrange(new[] { new RouteEvent("opposed", 10, RouteEventKind.Speed, "80", appliesToTravel: false, speedLimitKph: 80) },
+            0, 1000, 100, 3, _ => 30).Count == 0, "Opposing limits cannot receive a misleading travel speed comparison");
+        Check(RouteMapLabels.Arrange(dense, 0, 1000, 100, 0, _ => 30).Count == 0, "No annotation lanes is handled without invalid indexing");
+
+        var projector = new RouteTrafficProjector<string>(new[] {
+            new RouteInterval<string>("main", true, 100, 500, 0, 400),
+            new RouteInterval<string>("reverse", false, 300, 0, 400, 700) }, 700);
+        Check(projector.TryProject("car", false, new[] { new RouteTrafficPoint<string>("main", 190), new RouteTrafficPoint<string>("main", 210) }, 24, out var marker)
+            && marker.Start == 88 && marker.End == 112 && marker.Centre == 100, "One car uses native bogie centre and car length along the route");
+        Check(projector.TryProject("loco", true, new[] { new RouteTrafficPoint<string>("reverse", 200) }, 20, out marker)
+            && marker.IsLoco && marker.Centre == 500, "Opposing car direction does not change occupancy on a reverse route interval");
+        Check(!projector.TryProject("parallel", false, new[] { new RouteTrafficPoint<string>("parallel", 200) }, 20, out _),
+            "Parallel rails never become route traffic through proximity");
+        Check(!projector.TryProject("behind", false, new[] { new RouteTrafficPoint<string>("main", 50) }, 20, out _),
+            "A car behind the captured interval is excluded");
+        Check(!projector.TryProject("invalid", false, new[] { new RouteTrafficPoint<string>("main", double.NaN) }, 20, out _),
+            "Invalid native positions cannot become occupancy");
+        Check(projector.TryProject("boundary", false, new[] { new RouteTrafficPoint<string>("main", 100) }, 20, out marker)
+            && marker.Start == 0 && marker.End == 10, "A straddling car is clipped at the beginning of the capture");
+        Check(projector.TryProject("junction", false, new[] { new RouteTrafficPoint<string>("main", 490), new RouteTrafficPoint<string>("reverse", 290) }, 24, out marker)
+            && marker.Centre == 400, "Bogies on different connected tracks still produce one car at the junction");
+        Check(projector.TryProject("loop", false, new[] { new RouteTrafficPoint<string>("main", 150), new RouteTrafficPoint<string>("reverse", 100) }, 20, out marker)
+            && marker.End - marker.Start == 20, "Unrelated physical encounters never stretch one car across hundreds of metres");
     }
 
     private static void CompactListText()

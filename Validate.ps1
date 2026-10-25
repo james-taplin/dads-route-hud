@@ -25,7 +25,7 @@ function Invoke-ProjectCheck([string]$Project, [string[]]$ToolArguments = @()) {
 Push-Location $PSScriptRoot
 try {
     & (Join-Path $PSScriptRoot 'Build.ps1') -GamePath $GamePath
-    $taskSuites = @('DrivingMath','RouteCore','RouteService','NativeGeometry','NativeNames','NativeSigns','OptionalSignals','CarList','NativeTelemetry')
+    $taskSuites = @('DrivingMath','RouteCore','RouteService','NativeGeometry','NativeNames','NativeSigns','OptionalSignals','CarList','NativeTelemetry','NativeTraffic')
     foreach ($taskSuite in $taskSuites) {
         Invoke-ProjectCheck -Project "tests\$taskSuite.Tests.csproj"
     }

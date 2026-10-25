@@ -8,6 +8,10 @@ using System.Text.Json;
 if (args.Length != 2) throw new ArgumentException("Usage: OptionalContracts <game Mods directory> <report.json>");
 var contracts = new Contract[]
 {
+    new("../DerailValley_Data/Managed/Assembly-CSharp.dll", "CarSpawner", "property", "AllCars"),
+    new("../DerailValley_Data/Managed/Assembly-CSharp.dll", "TrainCar", "property", "Bogies"),
+    new("../DerailValley_Data/Managed/Assembly-CSharp.dll", "TrainCar", "property", "InterCouplerDistance"),
+    new("../DerailValley_Data/Managed/Assembly-CSharp.dll", "TrainCar", "method", "GetForwardSpeed", 0, false),
     new("DVSignals/Signals.Game.dll", "Signals.Game.SignalManager", "property", "AllControllers"),
     new("DVSignals/Signals.Game.dll", "Signals.Game.SignalManager", "base", "DV.Utils.SingletonBehaviour`1<Signals.Game.SignalManager>"),
     new("DVSignals/Signals.Game.dll", "Signals.Game.Controllers.BasicSignalController", "property", "PlacementInfo"),
@@ -193,7 +197,8 @@ static string TypeName(MetadataReader reader, TypeDefinitionHandle handle)
 {
     var type = reader.GetTypeDefinition(handle);
     var declaring = type.GetDeclaringType();
-    return declaring.IsNil ? reader.GetString(type.Namespace) + "." + reader.GetString(type.Name)
+    var ns = reader.GetString(type.Namespace);
+    return declaring.IsNil ? (ns.Length > 0 ? ns + "." : "") + reader.GetString(type.Name)
         : TypeName(reader, declaring) + "+" + reader.GetString(type.Name);
 }
 
@@ -203,7 +208,8 @@ static string MetadataTypeName(MetadataReader reader, EntityHandle handle)
     if (handle.Kind == HandleKind.TypeReference)
     {
         var reference = reader.GetTypeReference((TypeReferenceHandle)handle);
-        return reader.GetString(reference.Namespace) + "." + reader.GetString(reference.Name);
+        var ns = reader.GetString(reference.Namespace);
+        return (ns.Length > 0 ? ns + "." : "") + reader.GetString(reference.Name);
     }
     if (handle.Kind != HandleKind.TypeSpecification) return "Unsupported base metadata " + handle.Kind;
     var specification = reader.GetTypeSpecification((TypeSpecificationHandle)handle);

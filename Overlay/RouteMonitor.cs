@@ -14,9 +14,23 @@ namespace DvMod.HeadsUpDisplay
             public RouteEvent First = null!;
             public int Count;
             public double MeanDistance;
+            public bool Signal;
         }
 
         private static RouteSnapshot<RailTrack> snapshot = RouteSnapshot<RailTrack>.Empty();
+        private sealed class SpeedLabel
+        {
+            public RouteMapLabel Placement = null!;
+            public string First = "", Second = "", More = "";
+            public float FirstWidth, SecondWidth;
+        }
+        private const int SpeedLanes = 3;
+        private static List<SpeedLabel> nearSpeeds = new List<SpeedLabel>(), overviewSpeeds = new List<SpeedLabel>();
+        private static readonly List<List<SpeedLabel>> atlasSpeeds = new List<List<SpeedLabel>>();
+        private static IReadOnlyList<RouteTrafficMarker> traffic = Array.Empty<RouteTrafficMarker>();
+        private static IReadOnlyList<RouteTrafficMarker> ownCars = Array.Empty<RouteTrafficMarker>();
+        private static double? speedKph;
+        private static string trafficStatus = "";
         private static readonly List<Cluster> nearClusters = new List<Cluster>();
         private static readonly List<Cluster> overviewClusters = new List<Cluster>();
         private static readonly List<List<Cluster>> atlasClusters = new List<List<Cluster>>();
@@ -43,6 +57,8 @@ namespace DvMod.HeadsUpDisplay
 
         public static void PrepareLayout(RouteSnapshot<RailTrack> current, float availableWidth, int fontSize, Settings.LayoutSettings settings)
         {
+            traffic = NativeRouteTraffic.Markers; speedKph = NativeRouteTraffic.SpeedKph; trafficStatus = NativeRouteTraffic.Status;
+            ownCars = NativeRouteTraffic.OwnCars;
             var flags = (settings.expandedAtlas ? 1 : 0) | (settings.showRouteStatus ? 2 : 0)
                 | (settings.showNearProfile ? 4 : 0) | (settings.showOverview ? 8 : 0) | (settings.showNextEvent ? 16 : 0)
                 | (settings.showTracks ? 32 : 0) | (settings.showJunctions ? 64 : 0) | (settings.showSpeeds ? 128 : 0)
@@ -63,15 +79,16 @@ namespace DvMod.HeadsUpDisplay
             expanded = settings.expandedAtlas; showStatus = settings.showRouteStatus;
             showNear = settings.showNearProfile; showOverview = settings.showOverview; showNext = settings.showNextEvent;
             nearClusters.Clear(); overviewClusters.Clear();
-            if (showNear) BuildClusters(nearClusters, 0, nearDistance, width, true);
-            if (showOverview) BuildClusters(overviewClusters, 0, fullRange, width, true);
-            atlasClusters.Clear();
+            if (showNear) { BuildClusters(nearClusters, 0, nearDistance, width, true); nearSpeeds = SpeedLabels(0, nearDistance, width); }
+            if (showOverview) { BuildClusters(overviewClusters, 0, fullRange, width, true); overviewSpeeds = SpeedLabels(0, fullRange, width); }
+            atlasClusters.Clear(); atlasSpeeds.Clear();
             if (expanded)
                 for (var tile = 0; tile < 5; tile++)
                 {
                     var clusters = new List<Cluster>();
                     BuildClusters(clusters, tile * fullRange / 5, (tile + 1) * fullRange / 5, (width - 16) / 5, tile == 4);
                     atlasClusters.Add(clusters);
+                    atlasSpeeds.Add(SpeedLabels(tile * fullRange / 5, (tile + 1) * fullRange / 5, (width - 16) / 5));
                 }
             status = $"Mapped {Metres(snapshot.ReachedDistance)} / {Metres(snapshot.RequestedDistance)} requested  ·  {snapshot.Events.Count} items"
                 + (snapshot.Termination == RouteWalkTermination.HorizonReached ? "" : "  ·  " + Friendly(snapshot.Termination.ToString()))
@@ -79,26 +96,32 @@ namespace DvMod.HeadsUpDisplay
             var upcoming = snapshot.Events.FirstOrDefault(e => e.Distance > 0 && IsVisible(e));
             nextEventColor = upcoming != null && upcoming.Kind == RouteEventKind.Signal ? EventColor(upcoming) : Color.white;
             nextEvent = upcoming == null ? "No displayed event ahead; complete retained catalogue in UMM." : "Next " + FormatEvent(upcoming);
-            Height = (showStatus ? line : 0) + (showNear ? 3 * line + profileHeight : 0)
-                + (showOverview ? 5 * line + profileHeight : 0) + (showNext ? line : 0) + (expanded ? 3 * line + profileHeight : 0);
+            Height = (showStatus ? line : 0) + (showNear ? (4 + SpeedLanes) * line + profileHeight : 0)
+                + (showOverview ? (6 + SpeedLanes) * line + profileHeight : 0) + (showNext ? line : 0)
+                + (expanded ? (4 + SpeedLanes) * line + profileHeight : 0);
             if (Height == 0) Height = line;
         }
 
         private static void BuildClusters(List<Cluster> target, double start, double end, float plotWidth, bool includeEnd)
         {
+            plotWidth -= OriginInset(plotWidth, start);
             target.Clear();
             var markerWidth = MarkerWidth(plotWidth);
             var markerSpacing = markerWidth + 2;
-            Cluster? current = null;
+            Cluster? currentSignal = null, currentOther = null;
             foreach (var observation in snapshot.Events)
             {
                 if (!IsVisible(observation) || observation.Distance < start || observation.Distance > end || (!includeEnd && observation.Distance == end)) continue;
+                if (observation.Kind == RouteEventKind.Speed && observation.SpeedLimitKph.HasValue && observation.AppliesToTravel) continue;
+                var signal = observation.Kind == RouteEventKind.Signal;
+                var current = signal ? currentSignal : currentOther;
                 var separation = current == null ? double.PositiveInfinity
                     : MarkerCentre(observation.Distance, start, end, plotWidth, markerWidth)
                         - MarkerCentre(current.MeanDistance, start, end, plotWidth, markerWidth);
                 if (current == null || separation >= markerSpacing)
                 {
-                    current = new Cluster { First = observation, Count = 1, MeanDistance = observation.Distance };
+                    current = new Cluster { First = observation, Count = 1, MeanDistance = observation.Distance, Signal = signal };
+                    if (signal) currentSignal = current; else currentOther = current;
                     target.Add(current);
                 }
                 else
@@ -122,19 +145,19 @@ namespace DvMod.HeadsUpDisplay
                 var profile = new Rect(area.x, y + line, width, profileHeight);
                 var exaggeration = ProfileExaggeration(profile, 0, fullRange);
                 Text(new Rect(area.x, y, width, line), $"Track ahead  0–{Metres(fullRange)}  ·  elevation ×{exaggeration:F0}", Styles.noWrap); y += line;
-                DrawProfile(new Rect(area.x, y, width, profileHeight), 0, fullRange); y += profileHeight;
-                DrawClusters(new Rect(area.x, y, width, line), overviewClusters, 0, fullRange); y += line;
+                DrawMap(new Rect(area.x, y, width, profileHeight + SpeedLanes * line), overviewSpeeds, 0, fullRange); y += profileHeight + SpeedLanes * line;
+                DrawClusters(new Rect(area.x, y, width, 2 * line), overviewClusters, 0, fullRange); y += 2 * line;
                 DrawAxis(new Rect(area.x, y, width, line), 0, fullRange, 5); y += line;
-                Text(new Rect(area.x, y, width, line), "S signal   V limit   J switch   G grade   T track", Styles.noWrap); y += line;
-                Text(new Rect(area.x, y, width, line), "Numbers = grouped events · all items in UMM", Styles.noWrap); y += line;
+                Text(new Rect(area.x, y, width, line), "S signal · ←/↑/→ points · % grade · T track · green YOU · orange other cars", Styles.noWrap); y += line;
+                Text(new Rect(area.x, y, width, line), "Speed km/h vs you · +N more boards · your consist schematic at 0 m · " + trafficStatus, Styles.noWrap); y += line;
             }
             if (showNear)
             {
-                var profile = new Rect(area.x, y + line, width, profileHeight);
-                var exaggeration = ProfileExaggeration(profile, 0, nearDistance);
+                var profile = new Rect(area.x, y + line, width, profileHeight + SpeedLanes * line);
+                var exaggeration = ProfileExaggeration(new Rect(0, 0, width, profileHeight), 0, nearDistance);
                 Text(new Rect(area.x, y, width, line), $"Close-up  0–{Metres(nearDistance)}  ·  elevation ×{exaggeration:F0}", Styles.noWrap);
-                DrawProfile(profile, 0, nearDistance); y += line + profileHeight;
-                DrawClusters(new Rect(area.x, y, width, line), nearClusters, 0, nearDistance); y += line;
+                DrawMap(profile, nearSpeeds, 0, nearDistance); y += line + profileHeight + SpeedLanes * line;
+                DrawClusters(new Rect(area.x, y, width, 2 * line), nearClusters, 0, nearDistance); y += 2 * line;
                 DrawAxis(new Rect(area.x, y, width, line), 0, nearDistance, 5); y += line;
             }
             if (showNext)
@@ -151,9 +174,9 @@ namespace DvMod.HeadsUpDisplay
                 {
                     var x = area.x + tile * (tileWidth + 4);
                     var start = tile * fullRange / 5; var end = (tile + 1) * fullRange / 5;
-                    DrawProfile(new Rect(x, y, tileWidth, profileHeight), start, end);
-                    DrawClusters(new Rect(x, y + profileHeight, tileWidth, line), atlasClusters[tile], start, end);
-                    Text(new Rect(x, y + profileHeight + line, tileWidth, line), $"{Km(start)}–{Km(end)} · {atlasClusters[tile].Sum(c => c.Count)}", Styles.noWrap);
+                    DrawMap(new Rect(x, y, tileWidth, profileHeight + SpeedLanes * line), atlasSpeeds[tile], start, end);
+                    DrawClusters(new Rect(x, y + profileHeight + SpeedLanes * line, tileWidth, 2 * line), atlasClusters[tile], start, end);
+                    Text(new Rect(x, y + profileHeight + (SpeedLanes + 2) * line, tileWidth, line), $"{Km(start)}–{Km(end)} · {atlasClusters[tile].Sum(c => c.Count) + atlasSpeeds[tile].Sum(p => 1 + p.Placement.Additional)}", Styles.noWrap);
                 }
             }
             if (!showStatus && !showNear && !showOverview && !showNext && !expanded)
@@ -203,17 +226,18 @@ namespace DvMod.HeadsUpDisplay
 
         private static void DrawClusters(Rect rect, IReadOnlyList<Cluster> clusters, double start, double end)
         {
+            rect = PlotArea(rect, start);
             Fill(rect, new Color(0.09f, 0.12f, 0.14f, PlotBackgroundOpacity));
             ShadeUnknown(rect, start, end);
             var markerWidth = MarkerWidth(rect.width);
             foreach (var cluster in clusters)
             {
                 var x = rect.x + MarkerCentre(cluster.MeanDistance, start, end, rect.width, markerWidth);
-                var box = new Rect(x - markerWidth / 2, rect.y + 1, markerWidth, rect.height - 2);
+                var box = new Rect(x - markerWidth / 2, rect.y + (cluster.Signal ? 0 : line) + 1, markerWidth, line - 2);
                 var color = cluster.Count == 1 ? EventColor(cluster.First) : new Color(0.35f, 0.45f, 0.5f);
                 if (cluster.Count == 1 && !cluster.First.AppliesToTravel) color *= 0.55f;
                 Fill(box, color);
-                var token = cluster.Count == 1 ? EventToken(cluster.First.Kind) : cluster.Count.ToString(CultureInfo.InvariantCulture);
+                var token = cluster.Count == 1 ? EventToken(cluster.First) : (cluster.Signal ? "S" : "") + cluster.Count.ToString(CultureInfo.InvariantCulture);
                 var savedContent = GUI.contentColor;
                 // White/green signal backgrounds need dark tokens to remain legible.
                 GUI.contentColor = color.r * 0.2126f + color.g * 0.7152f + color.b * 0.0722f > 0.55f ? Color.black : Color.white;
@@ -223,13 +247,149 @@ namespace DvMod.HeadsUpDisplay
         }
 
         private static float MarkerWidth(float plotWidth) => Mathf.Min(plotWidth,
-            Math.Max(20, Styles.TextWidth(snapshot.Events.Count.ToString(CultureInfo.InvariantCulture), Styles.noWrapBold) + 6));
+            Math.Max(20, Styles.TextWidth("S" + snapshot.Events.Count.ToString(CultureInfo.InvariantCulture), Styles.noWrapBold) + 6));
 
         private static float MarkerCentre(double distance, double start, double end, float plotWidth, float markerWidth) =>
             Mathf.Clamp((float)RouteGraphScale.Fraction(distance, start, end) * plotWidth, markerWidth / 2, plotWidth - markerWidth / 2);
 
+        private static List<SpeedLabel> SpeedLabels(double start, double end, float plotWidth)
+        {
+            plotWidth -= OriginInset(plotWidth, start);
+            if (!Main.settings.layoutSettings.showSpeeds) return new List<SpeedLabel>();
+            var placements = RouteMapLabels.Arrange(snapshot.Events, start, end, plotWidth, SpeedLanes, SpeedWidth);
+            var result = new List<SpeedLabel>(placements.Count);
+            foreach (var placement in placements)
+            {
+                var item = placement.Event;
+                var first = RouteSpeed.Number(item.SpeedLimitKph!.Value);
+                var second = item.AlternateSpeedLimitKph.HasValue ? "/" + RouteSpeed.Number(item.AlternateSpeedLimitKph.Value) : "";
+                result.Add(new SpeedLabel { Placement = placement, First = first, Second = second,
+                    More = placement.Additional > 0 ? " +" + placement.Additional : "",
+                    FirstWidth = Styles.TextWidth(first, Styles.noWrapBold), SecondWidth = Styles.TextWidth(second, Styles.noWrapBold) });
+            }
+            return result;
+        }
+
+        private static float SpeedWidth(RouteEvent item) => Styles.TextWidth(RouteSpeed.Number(item.SpeedLimitKph!.Value)
+            + (item.AlternateSpeedLimitKph.HasValue ? "/" + RouteSpeed.Number(item.AlternateSpeedLimitKph.Value) : "")
+            + " +" + new string('8', snapshot.Events.Count.ToString(CultureInfo.InvariantCulture).Length), Styles.noWrapBold) + 4;
+
+        private static Color SpeedColor(double? limit)
+        {
+            switch (RouteSpeed.Compare(speedKph, limit))
+            {
+                case RouteSpeedState.WithinLimit: return new Color(0.35f, 1, 0.45f);
+                case RouteSpeedState.SlightlyOver: return new Color(1, 0.84f, 0.15f);
+                case RouteSpeedState.OverLimit: return new Color(1, 0.25f, 0.25f);
+                default: return new Color(0.7f, 0.75f, 0.8f);
+            }
+        }
+
+        private static void DrawMap(Rect rect, IReadOnlyList<SpeedLabel> limits, double start, double end)
+        {
+            Fill(rect, new Color(0.025f, 0.04f, 0.05f, PlotBackgroundOpacity));
+            var plot = PlotArea(rect, start);
+            var profile = new Rect(plot.x, rect.y + SpeedLanes * line, plot.width, profileHeight);
+            DrawProfile(profile, start, end);
+            var saved = GUI.contentColor;
+            foreach (var label in limits)
+            {
+                var placement = label.Placement;
+                var x = plot.x + placement.X + 2;
+                var y = rect.y + placement.Lane * line;
+                var anchor = plot.x + (float)RouteGraphScale.Fraction(placement.Event.Distance, start, end) * plot.width;
+                DrawLine(new Vector2(anchor, y + line - 1), new Vector2(anchor, profile.y), new Color(0.35f, 0.43f, 0.47f, 0.5f), 1);
+                GUI.BeginGroup(new Rect(x - 2, y, placement.Width, line - 1));
+                try
+                {
+                    Fill(new Rect(0, 0, placement.Width, line - 1), new Color(0.015f, 0.02f, 0.025f, 0.95f));
+                    GUI.contentColor = SpeedColor(placement.Event.SpeedLimitKph);
+                    Text(new Rect(2, 0, label.FirstWidth, line), label.First, Styles.noWrapBold);
+                    GUI.contentColor = SpeedColor(placement.Event.AlternateSpeedLimitKph);
+                    Text(new Rect(2 + label.FirstWidth, 0, label.SecondWidth, line), label.Second, Styles.noWrapBold);
+                    GUI.contentColor = Color.white;
+                    Text(new Rect(2 + label.FirstWidth + label.SecondWidth, 0,
+                        Mathf.Max(1, placement.Width - label.FirstWidth - label.SecondWidth - 2), line), label.More, Styles.noWrapBold);
+                }
+                finally { GUI.EndGroup(); GUI.contentColor = saved; }
+            }
+            GUI.contentColor = saved;
+            DrawTraffic(profile, start, end);
+            if (start == 0)
+            {
+                GetElevationRange(start, end, out var low, out var high);
+                var range = Math.Max(2, high - low);
+                low = (low + high) / 2 - range / 2;
+                var originY = profile.yMax - 2 - (float)((ElevationAt(0) - low) / range) * (profile.height - 4);
+                DrawOwnConsist(new Rect(rect.x, profile.y, plot.x - rect.x, profile.height), originY);
+            }
+        }
+
+        private static float OriginInset(float plotWidth, double start) => start == 0 ? Mathf.Min(plotWidth / 4, Mathf.Max(40, line * 4)) : 0;
+        private static Rect PlotArea(Rect rect, double start)
+        {
+            var inset = OriginInset(rect.width, start);
+            return new Rect(rect.x + inset, rect.y, Mathf.Max(1, rect.width - inset), rect.height);
+        }
+
+        private static void DrawOwnConsist(Rect rect, float originY)
+        {
+            Text(new Rect(rect.x, rect.y - 2 * line, rect.width, line), "YOU · " + (ownCars.Count > 0 ? ownCars.Count.ToString() : "?"), Styles.noWrapBold);
+            Text(new Rect(rect.x, rect.y - line, rect.width, line), "0 m", Styles.noWrap);
+            Fill(new Rect(rect.xMax - 1, rect.y, 1, rect.height), new Color(0.3f, 0.95f, 0.4f, 0.5f));
+            if (ownCars.Count == 0) return;
+            var cell = Mathf.Min(8, Mathf.Max(0.1f, rect.width - 4) / ownCars.Count);
+            var x = rect.xMax - 3 - cell * ownCars.Count;
+            foreach (var car in ownCars)
+            {
+                var height = car.IsLoco ? 8f : 6f;
+                Fill(new Rect(x, Mathf.Clamp(originY - height - 1, rect.y, rect.yMax - height),
+                    cell - Mathf.Min(1, cell * 0.2f), height), new Color(0.25f, 0.95f, 0.4f));
+                x += cell;
+            }
+        }
+
+        private static void DrawTraffic(Rect rect, double start, double end)
+        {
+            GetElevationRange(start, end, out var low, out var high);
+            var span = Math.Max(2, high - low);
+            low = (low + high) / 2 - span / 2;
+            foreach (var car in traffic)
+            {
+                if (car.End < start || car.Start > end) continue;
+                var from = rect.x + (float)RouteGraphScale.Fraction(Math.Max(start, car.Start), start, end) * rect.width;
+                var to = rect.x + (float)RouteGraphScale.Fraction(Math.Min(end, car.End), start, end) * rect.width;
+                var centre = Math.Max(start, Math.Min(end, car.Centre));
+                var y = rect.yMax - 2 - (float)((ElevationAt(centre) - low) / span) * (rect.height - 4);
+                var height = car.IsLoco ? 7f : 5f;
+                var size = Mathf.Min(rect.width, Mathf.Max(3, to - from));
+                var x = Mathf.Clamp((from + to - size) / 2, rect.x, rect.xMax - size);
+                var box = new Rect(x, Mathf.Clamp(y - height - 1, rect.y, rect.yMax - height), size, height);
+                Fill(box, new Color(0.015f, 0.04f, 0.02f));
+                Fill(new Rect(box.x + 0.5f, box.y + 1, Mathf.Max(1, box.width - 1), box.height - 2), new Color(1, 0.55f, 0.15f));
+            }
+        }
+
+        private static double ElevationAt(double distance)
+        {
+            var points = snapshot.Profile;
+            if (points.Count == 0) return 0;
+            var lo = 0; var hi = points.Count - 1;
+            while (lo < hi)
+            {
+                var mid = lo + (hi - lo + 1) / 2;
+                if (points[mid].Distance <= distance) lo = mid; else hi = mid - 1;
+            }
+            var a = points[lo];
+            if (lo + 1 == points.Count) return a.Elevation;
+            var b = points[lo + 1];
+            return b.Distance <= a.Distance ? a.Elevation : a.Elevation + (b.Elevation - a.Elevation)
+                * Math.Max(0, Math.Min(1, (distance - a.Distance) / (b.Distance - a.Distance)));
+        }
+
         private static void DrawAxis(Rect rect, double start, double end, int divisions, string? title = null)
         {
+            rect = PlotArea(rect, start);
             for (var tick = 0; tick <= divisions; tick++)
             {
                 var distance = start + (end - start) * tick / divisions;
@@ -243,6 +403,7 @@ namespace DvMod.HeadsUpDisplay
 
         private static float ProfileExaggeration(Rect rect, double start, double end)
         {
+            rect = PlotArea(rect, start);
             GetElevationRange(start, end, out var low, out var high);
             return (float)((rect.height - 4) / Math.Max(2, high - low) / (rect.width / Math.Max(1, end - start)));
         }
@@ -339,10 +500,16 @@ namespace DvMod.HeadsUpDisplay
         private static string Metres(double distance) => Main.settings.trackInfoSettings.distanceUnits == Settings.TrackInfoSettings.EventDistanceUnits.m && distance < 1000 ? distance.ToString(distance < 1 ? "0.##" : "0", CultureInfo.InvariantCulture) + " m" : Km(distance);
         public static string EventDistance(double distance) => Metres(distance);
         private static string Friendly(string value) => string.Concat(value.Select((c, i) => i > 0 && char.IsUpper(c) ? " " + c : c.ToString()));
-        private static string EventToken(RouteEventKind kind) => kind == RouteEventKind.Signal ? "S" : kind == RouteEventKind.Speed ? "V"
-            : kind == RouteEventKind.Junction ? "J" : kind == RouteEventKind.Grade ? "G" : kind == RouteEventKind.Track ? "T" : "?";
+        private static string EventToken(RouteEvent item) => item.Kind == RouteEventKind.Signal ? "S" : item.Kind == RouteEventKind.Speed ? item.SpeedLimitKph.HasValue ? "V" : "V?"
+            : item.Kind == RouteEventKind.Junction ? item.Marker == RouteTurn.LeftMarker ? "←" : item.Marker == RouteTurn.RightMarker ? "→"
+                : item.Marker == RouteTurn.AheadMarker ? "↑" : "J"
+            : item.Kind == RouteEventKind.Grade ? "%" : item.Kind == RouteEventKind.Track ? "T" : "?";
         public static Color EventColor(RouteEvent observation)
         {
+            if (observation.Kind == RouteEventKind.Junction) return new Color(0.84f, 0.69f, 1);
+            if (observation.Kind == RouteEventKind.Track) return new Color(0.49f, 0.87f, 0.91f);
+            if (observation.Kind == RouteEventKind.Grade) return new Color(0.62f, 0.86f, 0.59f);
+            if (observation.Kind == RouteEventKind.Speed) return new Color(1, 0.82f, 0.4f);
             var hex = observation.ColorHex.StartsWith("#", StringComparison.Ordinal) ? observation.ColorHex : "#" + observation.ColorHex;
             return ColorUtility.TryParseHtmlString(hex, out var color) ? color : new Color(0.32f, 0.46f, 0.55f);
         }

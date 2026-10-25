@@ -21,5 +21,8 @@
     <Compile Include="../Route/RouteNaming.cs" Link="RouteNaming.cs" />
     <Compile Include="../Route/RouteListText.cs" Link="RouteListText.cs" />
     <Compile Include="RouteCoreProgram.cs" />
+    <Compile Include="../Route/RouteSpeed.cs" />
+    <Compile Include="../Route/RouteTraffic.cs" />
+    <Compile Include="../Route/RouteMapLabels.cs" />
   </ItemGroup>
 </Project>

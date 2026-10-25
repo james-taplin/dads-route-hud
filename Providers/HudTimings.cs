@@ -8,7 +8,7 @@ namespace DvMod.HeadsUpDisplay
     internal enum HudTimingStage
     {
         HudUpdate, RouteUpdate, RouteWalk, RouteCollectStep, RouteFinish, RoutePublish, RouteMerge, RouteShift,
-        RouteProfile, OptionalSignals, JunctionNames, ListLayout,
+        RouteProfile, OptionalSignals, JunctionNames, ListLayout, RouteTraffic,
         SignDiscoveryNativePlacers, SignDiscoveryDoubleTrackPlacers, SignDiscoveryDebugRoots,
         SignDiscoveryGeneratorRoots, SignIndexRoots, SignMaintenance, SignRootRefresh,
         SignBootstrap, SignProjection, Count

@@ -43,13 +43,40 @@ dotnet run --project tests/NativeSigns.Tests.csproj --configuration Release
 dotnet run --project tests/OptionalSignals.Tests.csproj --configuration Release
 dotnet run --project tests/CarList.Tests.csproj --configuration Release
 dotnet run --project tests/NativeTelemetry.Tests.csproj --configuration Release
+
+dotnet run --project tests/NativeTraffic.Tests.csproj --configuration Release
 dotnet run --project tools/OptionalContracts/OptionalContracts.csproj --configuration Release -p:NuGetAudit=false -- 'C:\Program Files (x86)\Steam\steamapps\common\Derail Valley\Mods' '.\build\optional-contract-audit.json'
 git diff --check
 ./Package.ps1
 ./tests/Install.Tests.ps1
 ```
 
-Expect zero build warnings/errors and 781 checks across nine suites: 14 driving, 271 route/layout/naming, 88 capture-service lifecycle plus 22 HUD timing, 102 native-geometry, 52 native station/destination, 96 production sign-index, 58 actual optional-adapter, 33 car-list and 45 telemetry/registry. The installer fixtures add 12 assertions and the PE contract audit matches 64/64 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
+Expect zero build warnings/errors and 828 checks across ten suites: 14 driving, 299 route/layout/naming, 88 capture-service lifecycle plus 22 HUD timing, 102 native-geometry, 52 native station/destination, 100 production sign-index, 58 actual optional-adapter, 33 car-list, 45 telemetry/registry and 15 native traffic. The installer fixtures add 12 assertions and the PE contract audit matches 68/68 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
+
+## 0.5.5 map speeds and native traffic - runtime acceptance pending
+
+Verify loaded DLL/cache 0.5.5. Compare actual native speed-board numbers and positions with the
+map, including a dual board, and drive at limit-1, limit, limit+1, limit+5 and limit+6 km/h.
+The two values of a dual board should colour independently. No current-speed data must produce
+grey, never a guessed green. The annotation compares upcoming boards; it is not the current
+applicable speed limit. Crowded boards must have explicit +N counts and full readings in the list.
+Check signals retain a separate S row and grouped S counts, with arrows/%/T in the other row.
+
+Check the complete own consist schematic at 0 m in green, one rectangle per car/loco, including
+cars behind the captured origin. It is unscaled; the datum is the HUD bogie anchor, not the front
+of the train. With another coupled train on the selected native rails, compare orange cars and
+nearest-body distance against actual bogie positions. Repeat across junctions, reversed travel,
+curved/graded track, close-up and atlas. Car length/body extent and sampling age are approximate.
+Park a train on parallel rails: it must stay absent from orange route traffic. Check uncoupling,
+coupling, switching player cab, entering/leaving a locomotive, native registry changes, destruction
+and no usable source. Missing traffic is not an all-clear claim; virtual/unspawned/remote trains
+cannot be located from this source. Repeat with optional route/signal/AI mods absent or inactive.
+
+At narrow/wide windows and fonts 10-28, check speed labels do not overlap or spill into adjacent
+atlas tiles, the origin schematic leaves axis/profile/other markers aligned, and the fixed list
+footer remains stable. On a fresh stationary 20 km run, compare the existing inclusive stage
+reports including RouteTraffic; no repeated scene census should be introduced. Keep unrelated
+graphics/probe settings unchanged. No game was launched for the automated checks.
 
 ## 0.5.4 stable event list and nearest junction stations - runtime acceptance pending
 

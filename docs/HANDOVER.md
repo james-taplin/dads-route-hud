@@ -1,10 +1,10 @@
 # Development status
 
-Current candidate: 0.5.4 on codex/route-hud-junction-clarity, based on the installed 0.5.3
-checkpoint 11fe5bc. It stabilizes status/list layout, moves consist details above events and
-maps nearest next stations with travel-relative arrows. See the final sections for build/install
-evidence. The 20 km range and 0.5.3 performance corrections are preserved; runtime improvement
-remains unmeasured. The preserved handoff confirms a 0.5.1 collector stall, not a hardware limit.
+Current candidate: 0.5.5 on codex/route-map-traffic, based on installed/published 0.5.4 checkpoint
+e5c15b0. Map changes add native typed speed numbers, a green own-consist origin schematic and
+orange other-car positions on captured rails. See final sections for build/install evidence.
+The stable event list, 20 km range and performance corrections remain; game visual/performance
+acceptance is pending. The preserved handoff confirms a 0.5.1 collector stall, not a hardware limit.
 
 The 0.5.0 refactor was developed on codex/route-hud-refactor from the completed 0.4.2 checkpoint
 bb92b42, then installed at James's request. Older candidate status and acceptance notes below
@@ -783,3 +783,90 @@ Route HUD enabled, Driving HUD disabled. HUD shadow caches backed up and cleared
 DVPerfProbe settings retain SHA256 883284597DD55031B2BB93388DE00C3CC22C1BC7F899F6BECEF76813235131CE.
 No graphics/FSR changes or game launch. This post-install record does not alter the audited ZIP.
 No push or release; next game visual/performance acceptance remains James's later test.
+
+## 0.5.5 map speeds and native train display - 25 October 2026
+
+James asked what "set for your route" means and whether Route Setter is needed. Source confirms
+this trailing-junction phrase compares the selected native out-branch's track with the approach
+track. There is no Route Setter itinerary integration or dependency. Native selected-point
+changes are read regardless of who changed the switch. Nearest-station branch labels do not
+establish a planned job destination or a signal's reason for blocking.
+
+Requested map changes: clearer icons, speed numbers above the green profile coloured against
+current speed, and one rectangle per other loco/car on captured rails. James then clarified the
+own consist should also appear at the beginning in green and non-player cars should be orange.
+0.5.5 adds three fixed speed-annotation lanes above the profile and a separate lower signal row,
+so track/junction clusters cannot swallow the S boxes. Numeric readings come from native sign
+parts (tens of km/h), including both values on dual boards; raw evidence remains in the inspector.
+Typed limits survive shifted snapshots. Each value is green at/below it, yellow for positive
+excess through exactly 5 km/h, red above that, grey if own native speed is unavailable. This is
+a comparison with an upcoming board, not the current applicable limit. Crowded labels explicitly
+count extra boards as +N; full observations remain in the list and inspector. Labels clip within
+their packed area, including narrow atlas tiles; signal clusters show S plus a count. Junction
+arrows, grade % and track T use distinct colours. Existing event filters still apply.
+
+Native-first evidence: checked working RearrangedS060 targeting's CarSpawner.AllCars use and the
+installed game's CarSpawner, TrainCar and SingletonBehaviour implementations. AllCars is the
+maintained native registry; native bogie track and traveller span locate cars without a scene
+search or nearest-track guess. CarSpawner has no own AllowAutoCreate method and loaded-world
+guards precede the existing native singleton read. No new manager, collider, Harmony hook,
+optional traffic dependency or route-setter integration is introduced. Four native registry/
+motion declarations join the PE-only audit; its namespace formatter was corrected for global
+types, giving 68/68 matches without target assembly execution.
+
+NativeRouteTraffic advances at most 32 registry cars / 0.5 ms per Update, with 0.5 s between
+completed samples and a RouteTraffic timing stage under existing logging. Individual native
+property calls remain synchronous; final pure projection is not a game frame-time guarantee.
+Cars on irrelevant tracks do not allocate point records. Per-car failures preserve other valid
+observations and report partial coverage. Data clears on reset/source failure and reprojects
+against changed/moving route intervals. This is a local sampled view, not a global clear-line
+claim; virtual, unspawned or remote trains with no native local placement remain unavailable.
+Car-body extent is approximate from observed bogie positions and native inter-coupler length;
+opposite travel still occupies the same rails. Own/parallel/inactive/derailed cars are excluded
+from orange traffic. Hidden map/profile sections stop these samples.
+
+The own consist comes directly from native trainset.cars in its native order, independently of
+the other-car registry. It is an unscaled compact green schematic beside the marked 0 m datum,
+one rectangle per car/loco, including cars behind/off the forward capture. The datum remains the
+HUD's selected bogie anchor, not necessarily the front of the train. A fixed origin gutter keeps
+the distance axis, profile, event markers and orange cars aligned; its size does not depend on
+live car count. Locos use slightly taller rectangles. Orange cars appear above the profile at
+sampled route distance. Very compressed views cannot visually separate every physical car; use
+close-up and the existing own-car list. No position/length scale is claimed for the green schematic.
+
+Full validation passes: zero game-reference compiler warnings/errors, 828 assertions across ten
+suites (14 driving, 299 route core, 88 capture lifecycle + 22 timing, 102 geometry, 52 native names,
+100 sign index, 58 optional signals, 33 car list, 45 telemetry, 15 native traffic), 68/68 metadata
+contracts, the 14-file package identity/reference audit and 12 isolated installer assertions.
+Regressions include speed boundaries/dual/localized/malformed readings and shifted metadata,
+dense label count/overlap accounting, native track identity/reverse/straddling projection, full
+own membership/order, other-car deduplication, unreadable-car isolation, bounded continuation,
+movement cadence, route changes and missing registry/reset. These are boundary doubles, not a
+Unity visual or performance acceptance run. Settings/range and 0.5.4 stable-list behavior remain.
+James launches/tests the game; no game launch, push or release is part of this candidate record.
+
+Installation completed with the game closed; all 14 package file hashes verified, including
+QuantitiesNet.dll. Assembly 0.5.5.0, 222,720 bytes; DLL SHA256
+2E7DD9B995024F0694E22383391F19975E68FAAC6EE0A317CA2AE16BD2838E16.
+ZIP SHA256 902F0363E17285260039671A5E99256953CEC9C15E5B6B38AD6A364F488CC12C.
+Final verified backup/installation receipt:
+artifacts/backups/upgrade-0.5.5-a4bb8653acee4f9793c1f9a91dcc218d/.
+Settings.xml and UMM Params.xml are byte-identical; range 20,000 m, Route HUD enabled, Driving
+HUD disabled. Shadow cache count is zero. DVPerfProbe hash remains
+883284597DD55031B2BB93388DE00C3CC22C1BC7F899F6BECEF76813235131CE; no graphics settings changed.
+
+The first sandboxed install failed writing QuantitiesNet.dll with a user-mapped-section error;
+rollback also stopped at that file. Hash checks confirmed every pre-install file was restored
+except the backed-up shadow cache. Complete original backup, including that cache, is retained
+under artifacts/backups/upgrade-0.5.5-67271d13e2c84b0280c3c4c936201d51/.
+The old/new dependency hashes differed, so no dependency was skipped or substituted. A read-only
+Restart Manager query outside the sandbox reported no owning application. An approved elevated
+retry of the unchanged installer succeeded. The exact initial lock source is unknown; do not
+claim that an unchanged dependency was kept, that an app was killed or that installer code changed.
+No process was terminated. Post-install comparison verifies both candidate DLLs and preserved settings.
+
+Saved graph size is 2,560 x 128 with font 11, profile height 50, close-up enabled and overview/atlas
+disabled. Settings were preserved. The new annotation/signal rows increase scroll content, so
+James may need to enlarge the graph vertically or scroll to see all rows. Windows remain resizable;
+do not present this test candidate as visually accepted. This post-install record leaves the
+audited ZIP unchanged. Source work remains on codex/route-map-traffic; 0.5.4 was the prior main push.

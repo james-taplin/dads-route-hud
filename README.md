@@ -23,6 +23,27 @@ Route collection defaults to **50,000 metres** along the currently selected nati
 
 Dense markers combine into exact counts. Clustering and pagination never remove records or select only important events. Native track entries, junctions and every associated physical sign part/accessory are retained, including opposite-facing observations. Geometry samples form the grade profile separately; geometry-derived speed estimates are not presented as posted limits. Profile slopes show relative elevation with stated vertical exaggeration. S/V/J/G/T identify signal/speed/junction/grade/track markers; numbers identify groups of retained events. Tokens use contrasting text on bright signal backgrounds.
 
+From 0.5.5, posted speed numbers sit above the profile in km/h. Each number compares your current
+speed with that particular upcoming board: green at or under it, yellow up to 5 km/h over, red
+above that. This is an upcoming-limit comparison, not a claim that the board already applies.
+Both values on a dual board stay separate. Grey means live speed is unavailable. Crowded labels
+use three fixed lanes and `+N` for additional nearby boards; the complete list keeps every reading.
+Signals have their own lower row, so tracks cannot hide their S boxes; S followed by a count means
+multiple signal observations. Junctions use native travel arrows, grades use %, and tracks use T.
+
+Your complete native consist appears as one green rectangle per car/loco in a compact schematic
+beside the 0 m origin. The schematic is not to distance scale; 0 m is the HUD's selected native
+bogie anchor, not necessarily the train's front. Other locally loaded cars on the captured rails
+appear as orange rectangles at sampled route distances above the profile. Car body extent is
+approximate, based on native bogies and coupler length. Close-up helps separate compressed cars.
+Parallel tracks, your own cars and derailed cars are excluded from orange occupancy. Absence of
+orange does not prove a clear line: unspawned/remote trains have no native local placement here.
+
+The HUD follows the game's actual selected points. "Set for your route" on a trailing junction
+means the selected branch matches the track you are approaching on. It does not read a DV Route
+Setter itinerary; a route setter's actual point changes are picked up by the same native capture.
+Route Setter is not required. These observations do not establish why a signal is blocking.
+
 On the first load of 0.2.1, the simpler continuous view is selected once: optional close-up and five-section atlas are turned off. Range, window placement, metric choices and other settings are preserved. Subsequent display choices are remembered.
 
 The walker has no old 100-track, 64-signal or presentation-row completion cap. Work continues across Update frames. Directed native intervals prevent repeated traversal, including return to the untravelled prefix of the starting track. A loop closes at the first already covered directed span. The display reports reached distance and actual termination, and shades unknown space. A shorter loop, dead end, missing geometry, partial sign association or unavailable signals is never labelled complete 50 km event coverage.
@@ -30,6 +51,12 @@ The walker has no old 100-track, 64-signal or presentation-row completion cap. W
 The collector reads native geometry and sign metadata without adding sign colliders or forcing scene streaming. Native placement capture preserves exact source identity. Late enablement validates native sign recipes against observed signs, with unmatched/ambiguous data reported explicitly. See [native sign association](docs/NATIVE_SIGN_ASSOCIATION.md).
 
 ## Candidate status
+
+Candidate **0.5.5** adds the map annotations and native car display above. Sampling uses the
+maintained game car registry and exact bogie track identities in bounded Update batches, with
+no scene search, new runtime dependency or change to the retained 20 km test range. Graph-only
+sampling stops when profile/map sections are hidden. Settings and the stable list footer remain.
+Compilation and boundary tests do not establish in-game visual or performance acceptance.
 
 Candidate **0.5.4** stabilizes the event-list layout, retains known partial signal coverage during
 refresh, moves train details above events and maps each junction branch to one nearest next station.

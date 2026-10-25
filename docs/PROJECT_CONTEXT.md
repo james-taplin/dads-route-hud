@@ -1,6 +1,6 @@
 # Project context
 
-Dad's Route HUD 0.5.4 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
+Dad's Route HUD 0.5.5 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
 
 The public source branch starts at original MIT revision 9acf926a2d7c8512ddb85cbf637b3e4a9bfa6f6f and imports the current fork source in one commit. The local development lineage includes Koteq b09fe942ab5118e6aa348a153f686a537a483d0d and Dad's Driving HUD. Koteq's compatibility contributions are retained and credited, but its old committed game DLLs are excluded by not importing that commit's history. QuantitiesNet is pinned at 2b6522cb70df8108af0d96dec6ebdc6c35a673aa. See LICENSING.md and CREDITS.md.
 
@@ -64,6 +64,32 @@ and 0.5.3 stationary improvement require a fresh game run. The 20 km test range 
 
 
 ## Track-ahead clarity update
+
+Version 0.5.5 adds typed primary/alternate native speed readings to source events and preserves
+them through shifted snapshots. RouteSpeed reads native board text in tens of km/h, including
+dual boards, retaining unknown/malformed source observations without inventing numeric limits.
+Map numbers compare each upcoming board with current absolute native speed in km/h: <= limit
+green, > limit through +5 yellow, > +5 red; unknown speed grey. Three fixed annotation lanes count
+overflows as +N, while all complete source readings remain in the list/inspector. Signal clusters
+have a separate row from track/junction/grade clusters. Their aspect colours remain observations.
+
+NativeRouteTraffic uses CarSpawner.AllCars and exact bogie track/span in Update. Existing native
+singleton/registry behavior and working RearrangedS060 targeting were inspected before adding this
+adapter; no whole-scene discovery, optional traffic manager or gameplay hook is required. The
+sampler advances at most 32 cars / 0.5 ms per Update and pauses 0.5 s between completed passes;
+individual native property calls remain synchronous. Only on-route cars allocate point samples.
+RouteTrafficProjector indexes intervals by native track and reprojects observations when the
+route view moves; it never chooses nearby parallel tracks. Per-car failures are isolated and
+status is partial. Logging includes a RouteTraffic stage. Hidden map/profile sections stop sampling.
+
+Own train membership comes directly from trainset.cars, independently of the other-car registry.
+One green rectangle per own car/loco is shown in an unscaled origin-side schematic, leaving the
+mapped axis/profile/markers aligned at the selected bogie's 0 m. Other native locally loaded cars
+are orange above the profile at sampled route distances; body extent is approximate from bogies
+and native inter-coupler length. The own schematic follows native consist ordering and counts all
+cars even behind/off the captured forward intervals. No remote/unspawned/virtual train position,
+global clear-line claim or cause of blocking is inferred. Route Setter remains unnecessary: the
+HUD reads actual native selected points, not a route setter's intended itinerary.
 
 Version 0.5.4 moves job/loco/consist rows above the event list. Coverage, filter counts, refresh
 messages and warnings paint in a fixed four-line opaque black footer outside scroll-content

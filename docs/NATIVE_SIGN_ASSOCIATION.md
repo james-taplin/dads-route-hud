@@ -39,6 +39,8 @@ Coverage explicitly describes observed roots, validated recipe matches, unmatche
 The metadata-only contract tool checks 16 native sign member declarations, 13 DoubleTrack placer
 declarations, 33 other optional-mod declarations and two signal-manager singleton-binding contracts.
 It records source assembly hashes/signature blobs and executes none of the inspected target code.
-All 64 contracts matched the installed assemblies.
+The current audit also checks four native car-registry/motion declarations for map traffic;
+all 68 contracts matched the installed assemblies. Native speed events retain typed primary and
+alternate km/h values alongside raw source evidence, so map colouring never parses a UI label.
 
 Read-only source/metadata review confirmed native local/global scope, filters, junction ownership, direction, pole offset/rotation, speed/grade text units and origin-shift conventions. Compilation and runtime evidence are recorded in the main validation handover. Sign matching, distant modified-route coverage, late enablement, origin changes and cold native-recipe timing still require in-game observations. A per-track native recipe call is synchronous and cannot be pre-empted inside that native call by the route collector's work budget.

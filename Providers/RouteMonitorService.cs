@@ -365,7 +365,8 @@ namespace DvMod.HeadsUpDisplay
                 {
                     if (!interval.TryProject(sign.Span, out var distance) || AtRepeatedEndpoint(source, distance)) continue;
                     collectingEvents.Add(new RouteEvent(sign.SourceId + ":encounter:" + index,
-                        distance, sign.Kind, sign.Label, fact: sign.Fact, appliesToTravel: sign.Forward == interval.Forward));
+                        distance, sign.Kind, sign.Label, fact: sign.Fact, appliesToTravel: sign.Forward == interval.Forward,
+                        speedLimitKph: sign.SpeedLimitKph, alternateSpeedLimitKph: sign.AlternateSpeedLimitKph));
                     yield return 0;
                 }
 

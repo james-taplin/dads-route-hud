@@ -74,6 +74,7 @@ namespace DvMod.HeadsUpDisplay
             NativeTelemetry.Reset();
             OptionalSignalTelemetry.Reset();
             RouteMonitorService.Reset();
+            NativeRouteTraffic.Reset();
             CarList.Reset();
         }
 
@@ -101,9 +102,15 @@ namespace DvMod.HeadsUpDisplay
                 {
                     NativeRouteSignIndex.Prune();
                     RouteMonitorService.Update(car);
+                    var mapVisible = settings.layoutSettings.popOutGraph ? settings.layoutSettings.showGraphWindow
+                        : settings.layoutSettings.showHud && settings.layoutSettings.routeDisplay != Settings.LayoutSettings.RouteDisplay.EventList;
+                    mapVisible &= settings.layoutSettings.showNearProfile || settings.layoutSettings.showOverview || settings.layoutSettings.expandedAtlas;
+                    if (mapVisible) NativeRouteTraffic.Update(car, RouteMonitorService.Current);
+                    else NativeRouteTraffic.Reset();
                 }
                 else
                 {
+                    NativeRouteTraffic.Reset();
                     if (RouteMonitorService.IsActive || OptionalSignalTelemetry.IsAvailable
                         || OptionalSignalTelemetry.IsReading || OptionalSignalTelemetry.SampledAt > 0)
                     {

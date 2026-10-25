@@ -53,6 +53,7 @@ internal static class NativeSignsProgram
         DoubleTrackPlacementAndLateEnable();
         IncrementalMaintenanceAndOriginShift();
         OptionalDiscoveryAndLateRecipeShift();
+        TypedSpeedBoards();
         NativeRouteSignIndex.Reset();
         Console.WriteLine(checks + " actual native-sign index checks passed (reflection/Unity/native boundary doubles; not game acceptance).");
     }
@@ -60,6 +61,18 @@ internal static class NativeSignsProgram
     private static void FinishMaintenance(int roots)
     {
         for (var i = 0; i <= roots / 32 + 2; i++) NativeRouteSignIndex.Prune();
+    }
+
+    private static void TypedSpeedBoards()
+    {
+        Prepare(); var track = Track("Typed speed boards"); var placer = Placer();
+        var root = Root(new Vector3(10, 0, 0), new[] { Part(SignType.SpeedLimit, "8"), Part(SignType.SpeedLimitDual, "4/6"), Part(SignType.SpeedLimitDual, "4/bad") });
+        Observe(placer, track, root.transform.position, root);
+        var signs = NativeRouteSignIndex.EnsureTrack(track);
+        Check(signs[0].SpeedLimitKph == 80 && signs[0].AlternateSpeedLimitKph == null, "Actual sign adapter retains typed single-board speed in km/h");
+        Check(signs[1].SpeedLimitKph == 40 && signs[1].AlternateSpeedLimitKph == 60 && signs[1].Label == "40/60 km/h", "Actual native dual board retains both readings and readable units");
+        Check(signs[2].SpeedLimitKph == null && signs[2].Label.Contains("4/bad"), "Malformed dual-board text remains a retained source observation without guessed limits");
+        Check(signs[1].Fact.Contains("raw text: 4/6"), "Native raw board text remains available for source inspection");
     }
 
     private static void IncrementalMaintenanceAndOriginShift()
