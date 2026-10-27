@@ -109,12 +109,13 @@ namespace DvMod.HeadsUpDisplay
     }
     public static class NativeRouteSignIndex
     {
+        public static NativeRouteSign[] Signs = Array.Empty<NativeRouteSign>();
         public static Action<RailTrack>? OnEnsureTrack;
         public static long SnapshotRevision => 0;
         public static string Coverage => "Test native observations";
         public static IReadOnlyList<string> Diagnostics => Array.Empty<string>();
         public static IEnumerable<NativeRouteSign> EnsureTrack(RailTrack track)
-        { OnEnsureTrack?.Invoke(track); return Array.Empty<NativeRouteSign>(); }
+        { OnEnsureTrack?.Invoke(track); return Signs; }
     }
     public sealed class SignalTrackEvent
     {

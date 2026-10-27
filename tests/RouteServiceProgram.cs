@@ -23,6 +23,13 @@ internal static class RouteServiceProgram
         foreach (var bogie in car.Bogies) bogie.track = track;
         RouteMonitorService.Reset();
         OptionalSignalTelemetry.Reset();
+        NativeRouteSignIndex.Signs = new[] {
+            new NativeRouteSign { SourceId = "limit-single", Span = 200, Forward = true, Kind = RouteEventKind.Speed,
+                Label = "80 km/h", SpeedLimitKph = 80 },
+            new NativeRouteSign { SourceId = "limit-dual", Span = 300, Forward = true, Kind = RouteEventKind.Speed,
+                Label = "40/60 km/h", SpeedLimitKph = 40, AlternateSpeedLimitKph = 60 },
+            new NativeRouteSign { SourceId = "limit-unknown", Span = 400, Forward = true, Kind = RouteEventKind.Speed,
+                Label = "Unreadable board" } };
         // The production collector has a real 2 ms frame budget. Cold JIT can split
         // initial collection across extra frames; settle setup without advancing
         // simulated time or changing the lifecycle timestamps/assertions below.
@@ -33,16 +40,19 @@ internal static class RouteServiceProgram
             throw new Exception("Initial asynchronous capture did not settle within 32 setup updates");
         for (var i = 0; i < 4; i++) Frame(car, 1 + i * 0.3f, 10);
         Check(RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Initial signal sample is ready");
+        CheckPublishedSpeedLimits("Initial merged publication");
         var resets = OptionalSignalTelemetry.ResetCount;
         // Finish a replacement after travelling 10 metres on the old capture. The new origin is 20,
         // and must not inherit the old capture's 10-metre offset on its completion frame.
         Frame(car, 3.2f, 20);
         Check(RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Same-route reading retains signal rows");
         Check(RouteMonitorService.Current.SignalCoverage.Contains("partial"), "Same-route replacement retains the previous sample's partial coverage warning");
+        CheckPublishedSpeedLimits("Same-route held publication");
         Frame(car, 3.5f, 20.1);
         Check(OptionalSignalTelemetry.ResetCount == resets, "New capture uses its own origin; motion must not reset optional telemetry");
         Frame(car, 3.8f, 20.2);
         Check(RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Replacement publishes signals atomically");
+        CheckPublishedSpeedLimits("Moving replacement publication");
         Frame(car, 4.1f, 20.3);
         Frame(car, 4.4f, 20.4);
         Check(RouteMonitorService.Current.Diagnostics.Any(d => d.StartsWith("Capture 2 since loading")), "One scheduled replacement, no spurious left-route rebuild");
@@ -55,6 +65,7 @@ internal static class RouteServiceProgram
         OptionalSignalTelemetry.ActiveSignalSource = null;
         Frame(car, 12.5f, 46);
         Check(!RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Disabled source clears previous signal facts");
+        CheckPublishedSpeedLimits("Publication without optional signals");
         OptionalSignalTelemetry.ActiveSignalSource = new object();
         for (var i = 0; i < 4; i++) Frame(car, 12.8f + i * 0.3f, 46);
         Check(RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Re-enabled source supplies a new sample");
@@ -73,10 +84,12 @@ internal static class RouteServiceProgram
             Check(RouteMonitorService.Current.SignalCoverage.Contains("partial"), "Stationary refresh never clears the known partial signal coverage warning");
         }
         // A source replacement during a read must not borrow the old source's facts.
+        CheckPublishedSpeedLimits("Repeated stationary refresh");
         OptionalSignalTelemetry.ActiveSignalSource = new object();
         Frame(car, 23, 46);
         Check(!RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Signal), "Replacement source cannot inherit the old source's signals");
         RouteMonitorService.Reset();
+        NativeRouteSignIndex.Signs = Array.Empty<NativeRouteSign>();
         CheckTopologyInvalidation();
         var lifecycleChecks = checks;
         CheckHudTimings();
@@ -87,6 +100,25 @@ internal static class RouteServiceProgram
     private static bool HasTimingCalls(string? report, HudTimingStage stage, int calls)
         => report != null && report.Split(';').Any(part => part.Contains(stage + " max=")
             && part.Contains(" calls=" + calls + " "));
+
+    private static void CheckPublishedSpeedLimits(string stage)
+    {
+        var events = RouteMonitorService.Current.Events;
+        var single = events.Single(e => e.Id.StartsWith("limit-single:"));
+        var dual = events.Single(e => e.Id.StartsWith("limit-dual:"));
+        var unknown = events.Single(e => e.Id.StartsWith("limit-unknown:"));
+        Check(single.SpeedLimitKph == 80 && single.AlternateSpeedLimitKph == null, stage + " retains the numeric single-board limit");
+        Check(dual.SpeedLimitKph == 40 && dual.AlternateSpeedLimitKph == 60, stage + " retains both numeric dual-board limits");
+        Check(unknown.SpeedLimitKph == null && unknown.AlternateSpeedLimitKph == null, stage + " preserves unreadable boards without invented limits");
+        var labels = RouteMapLabels.Arrange(events, 0, 500, 1000, 3, _ => 40);
+        Check(labels.Count == 2 && labels.Any(p => p.Event.Id == single.Id) && labels.Any(p => p.Event.Id == dual.Id),
+            stage + " reaches the actual numeric map-label path rather than V? markers");
+        Check(RouteSpeed.Compare(40, dual.SpeedLimitKph) == RouteSpeedState.WithinLimit
+            && RouteSpeed.Compare(45, dual.SpeedLimitKph) == RouteSpeedState.SlightlyOver
+            && RouteSpeed.Compare(45.01, dual.SpeedLimitKph) == RouteSpeedState.OverLimit
+            && RouteSpeed.Compare(45.01, dual.AlternateSpeedLimitKph) == RouteSpeedState.WithinLimit,
+            stage + " supplies green/yellow/red comparisons with independent dual readings");
+    }
 
     private static void CheckHudTimings()
     {

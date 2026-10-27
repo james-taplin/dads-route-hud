@@ -566,7 +566,8 @@ namespace DvMod.HeadsUpDisplay
                     freshness = OptionalSignalTelemetry.IsAvailable ? "Local occupancy/reservation observation; " + OptionalSignalTelemetry.Status : "";
                 }
                 events.Add(new RouteEvent(item.Id, item.Distance, item.Kind, item.Label, item.Aspect,
-                    item.ColorHex, fact, freshness, item.AppliesToTravel, item.Code, item.Marker));
+                    item.ColorHex, fact, freshness, item.AppliesToTravel, item.Code, item.Marker,
+                    item.SpeedLimitKph, item.AlternateSpeedLimitKph));
             }
             foreach (var signal in OptionalSignalTelemetry.UpcomingSignals)
             {

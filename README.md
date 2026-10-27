@@ -52,6 +52,11 @@ The collector reads native geometry and sign metadata without adding sign collid
 
 ## Candidate status
 
+Candidate **0.5.6** fixes speed colouring after route publication. The sign collector and moving
+view already retained numeric limits, but the shared publication merge dropped both speed fields.
+The merge now preserves them, including dual boards, held refreshes and absent optional signals.
+Layout, thresholds, settings and traffic display stay the same; in-game colour acceptance is pending.
+
 Candidate **0.5.5** adds the map annotations and native car display above. Sampling uses the
 maintained game car registry and exact bogie track identities in bounded Update batches, with
 no scene search, new runtime dependency or change to the retained 20 km test range. Graph-only

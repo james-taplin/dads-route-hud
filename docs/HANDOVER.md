@@ -1,10 +1,9 @@
 # Development status
 
-Current candidate: 0.5.5 on codex/route-map-traffic, based on installed/published 0.5.4 checkpoint
-e5c15b0. Map changes add native typed speed numbers, a green own-consist origin schematic and
-orange other-car positions on captured rails. See final sections for build/install evidence.
-The stable event list, 20 km range and performance corrections remain; game visual/performance
-acceptance is pending. The preserved handoff confirms a 0.5.1 collector stall, not a hardware limit.
+Current candidate: 0.5.6 on codex/fix-route-speed-colours, based on installed 0.5.5 checkpoint
+a31abf3. It fixes numeric speed metadata lost during publication, which prevented map number
+colouring. See final sections for evidence. The layout, stable event list, traffic, 20 km range
+and performance corrections remain; game colour/visual acceptance is pending.
 
 The 0.5.0 refactor was developed on codex/route-hud-refactor from the completed 0.4.2 checkpoint
 bb92b42, then installed at James's request. Older candidate status and acceptance notes below
@@ -870,3 +869,47 @@ disabled. Settings were preserved. The new annotation/signal rows increase scrol
 James may need to enlarge the graph vertically or scroll to see all rows. Windows remain resizable;
 do not present this test candidate as visually accepted. This post-install record leaves the
 audited ZIP unchanged. Source work remains on codex/route-map-traffic; 0.5.4 was the prior main push.
+
+## 0.5.6 missing speed colours - 27 October 2026
+
+James likes the new layout but reports the route-guide speed limits are not colour coded.
+Player.log records DadsRouteHUD 0.5.5 loading. Installed DadsRouteHUD.dll and its 28980 shadow cache
+both have assembly version 0.5.5.0 and SHA256
+2E7DD9B995024F0694E22383391F19975E68FAAC6EE0A317CA2AE16BD2838E16.
+Pre-fix log is preserved under build/evidence/speed-colours-20261027/Player-0.5.5.log, SHA256
+FE3709CA06554E51AB331E0AEE9DB15CA5124B6059E27B9E67CC78F8EA1EE6AB.
+The log establishes loaded identity/activity, not rendered colours. Its SkinManager paint/pool
+exception is outside this colour path; no unrelated mod change was justified or made.
+
+Confirmed cause, reproduced before production editing: NativeRouteSignIndex and collection retain
+SpeedLimitKph/AlternateSpeedLimitKph, and RouteSnapshotView.Shift already copied them. However,
+RouteMonitorService.MergeOptional reconstructed each RouteEvent without either field. This path
+runs even with no optional signal source. The published map thus got board labels but null limits,
+disqualifying them from numeric coloured labels and leaving V? fallback markers. The added
+production-service regression failed at "Initial merged publication retains the numeric
+single-board limit" against 0.5.5. The earlier parser/shift tests missed this publication copy.
+
+The correction is only to pass both existing numeric fields through that constructor. No new
+colour calculation, parser, dependency, probe or layout change was necessary. Five service phases
+now each verify single/dual numeric retention, unknown preservation, actual map-label eligibility
+and green/yellow/red comparisons: initial merged publication, held same-route publication, moving
+replacement, no optional signals and repeated stationary refresh. This adds 25 assertions to
+the service suite, now 113 lifecycle + 22 timing. The comparison at a dual 40/60 board checks
+40 -> green, 45 -> yellow, 45.01 -> red for the 40 value and green for the 60 value.
+
+Full Validate.ps1 passes: zero game-reference warnings/errors, 853 checks across ten suites,
+68/68 metadata contracts, the 14-file package identity/reference audit, 12 isolated installer
+assertions and diff whitespace checks. The source regression is fixed; Unity's actual rendering
+and James's next drive remain separate acceptance, as documented in VALIDATION.md. The existing
+list/footer, green own/orange other trains, thresholds, window geometry and range are preserved.
+
+Installed 0.5.6 with the game closed; all 14 package file hashes verified. DLL SHA256
+75A08C112EE931C8DAD541568315F296451FA4216E9022DDAFBCED4A098A7631; ZIP SHA256
+7D58EB2759B7EE9D92BFE20DC2C3A7AF22FD518D542EA3DA0C59A529963535BE.
+Verified prior files/cache and installation receipt:
+artifacts/backups/upgrade-0.5.6-e6f1cfea16cf41b8ad0c103b33346aa7/.
+The same installer was run with approved elevation, avoiding repetition of the prior sandboxed
+dependency-copy failure. Settings and Params.xml remained byte-identical; 20,000 m range, Route
+HUD enabled and Driving HUD disabled. Zero HUD shadow caches remain until next normal launch.
+No game launch or new runtime colour observation is claimed; no push/release. This post-install
+record leaves the validated ZIP unchanged. Changes are saved on codex/fix-route-speed-colours.

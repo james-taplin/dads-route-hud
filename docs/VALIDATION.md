@@ -51,7 +51,19 @@ git diff --check
 ./tests/Install.Tests.ps1
 ```
 
-Expect zero build warnings/errors and 828 checks across ten suites: 14 driving, 299 route/layout/naming, 88 capture-service lifecycle plus 22 HUD timing, 102 native-geometry, 52 native station/destination, 100 production sign-index, 58 actual optional-adapter, 33 car-list, 45 telemetry/registry and 15 native traffic. The installer fixtures add 12 assertions and the PE contract audit matches 68/68 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
+Expect zero build warnings/errors and 853 checks across ten suites: 14 driving, 299 route/layout/naming, 113 capture-service lifecycle plus 22 HUD timing, 102 native-geometry, 52 native station/destination, 100 production sign-index, 58 actual optional-adapter, 33 car-list, 45 telemetry/registry and 15 native traffic. The installer fixtures add 12 assertions and the PE contract audit matches 68/68 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
+
+## 0.5.6 speed-colour publication regression - runtime acceptance pending
+
+On James's next normal drive, verify the loaded DLL/cache version and hash, then compare an
+upcoming native numeric board with the map. It must use the coloured-number lane rather than
+the old V? fallback after the first merged publication. At/below that board's limit is green,
+positive excess through 5 km/h yellow, and more than 5 red. Repeat through scheduled refreshes
+and while moving. On a dual board each value compares independently. Unknown native text remains
+unknown and no live speed remains grey; the complete list and stable footer must remain intact.
+Automated tests reproduce the 0.5.5 loss at initial service publication and verify these fields,
+numeric-label eligibility and comparisons across held/moving/optional-disabled/stationary paths.
+They do not execute Unity's actual label renderer. No game launch is part of these checks.
 
 ## 0.5.5 map speeds and native traffic - runtime acceptance pending
 

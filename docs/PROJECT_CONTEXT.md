@@ -1,6 +1,6 @@
 # Project context
 
-Dad's Route HUD 0.5.5 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
+Dad's Route HUD 0.5.6 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
 
 The public source branch starts at original MIT revision 9acf926a2d7c8512ddb85cbf637b3e4a9bfa6f6f and imports the current fork source in one commit. The local development lineage includes Koteq b09fe942ab5118e6aa348a153f686a537a483d0d and Dad's Driving HUD. Koteq's compatibility contributions are retained and credited, but its old committed game DLLs are excluded by not importing that commit's history. QuantitiesNet is pinned at 2b6522cb70df8108af0d96dec6ebdc6c35a673aa. See LICENSING.md and CREDITS.md.
 
@@ -64,6 +64,14 @@ and 0.5.3 stationary improvement require a fresh game run. The 20 km test range 
 
 
 ## Track-ahead clarity update
+
+Version 0.5.6 preserves primary/alternate typed speed limits in RouteMonitorService.MergeOptional.
+In 0.5.5 this publication copy omitted those fields, even when no optional mod was available;
+the map therefore received board names without numeric limits and treated them as V? events.
+Production-service regressions now cover collection -> merge -> held/replacement/moving view ->
+map-label eligibility and speed comparisons, with and without optional signals. The previously
+passing parser/shift tests did not exercise this full publication path. No layout or threshold
+change is needed; the actual loaded 0.5.5 DLL/cache was verified before correcting the source.
 
 Version 0.5.5 adds typed primary/alternate native speed readings to source events and preserves
 them through shifted snapshots. RouteSpeed reads native board text in tens of km/h, including

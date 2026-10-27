@@ -14,6 +14,9 @@
     <Compile Include="../Route/RouteDirection.cs" />
     <Compile Include="../Route/RouteTurn.cs" />
     <Compile Include="../Route/RouteNaming.cs" />
+    <Compile Include="../Route/RouteSpeed.cs" />
+    <Compile Include="../Route/RouteMapLabels.cs" />
+    <Compile Include="../Route/RouteGraphScale.cs" />
     <Compile Include="../Providers/RouteMonitorService.cs" />
     <Compile Include="../Providers/HudTimings.cs" />
     <Compile Include="RouteServiceStubs.cs" />
