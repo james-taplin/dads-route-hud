@@ -109,6 +109,7 @@ namespace DvMod.HeadsUpDisplay
     }
     public static class NativeRouteSignIndex
     {
+        public static bool DiscoveryComplete = true;
         public static NativeRouteSign[] Signs = Array.Empty<NativeRouteSign>();
         public static Action<RailTrack>? OnEnsureTrack;
         public static long SnapshotRevision => 0;

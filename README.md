@@ -23,13 +23,13 @@ Route collection defaults to **50,000 metres** along the currently selected nati
 
 Dense markers combine into exact counts. Clustering and pagination never remove records or select only important events. Native track entries, junctions and every associated physical sign part/accessory are retained, including opposite-facing observations. Geometry samples form the grade profile separately; geometry-derived speed estimates are not presented as posted limits. Profile slopes show relative elevation with stated vertical exaggeration. S/V/J/G/T identify signal/speed/junction/grade/track markers; numbers identify groups of retained events. Tokens use contrasting text on bright signal backgrounds.
 
-From 0.5.5, posted speed numbers sit above the profile in km/h. Each number compares your current
+Posted speed numbers sit below the profile in km/h, alongside the other map boards. Each number compares your current
 speed with that particular upcoming board: green at or under it, yellow up to 5 km/h over, red
 above that. This is an upcoming-limit comparison, not a claim that the board already applies.
-Both values on a dual board stay separate. Grey means live speed is unavailable. Crowded labels
-use three fixed lanes and `+N` for additional nearby boards; the complete list keeps every reading.
-Signals have their own lower row, so tracks cannot hide their S boxes; S followed by a count means
-multiple signal observations. Junctions use native travel arrows, grades use %, and tracks use T.
+Both values on a dual board stay separate. Grey means live speed is unavailable. All boards fill
+one row first and use a second for overlaps, with one `+N` badge for dense overflow; the complete
+list keeps every reading. Signals use coloured S boxes, junctions use native travel arrows,
+grades use %, and tracks use T. Backboards fit the displayed tokens.
 
 Your complete native consist appears as one green rectangle per car/loco in a compact schematic
 beside the 0 m origin. The schematic is not to distance scale; 0 m is the HUD's selected native
@@ -50,7 +50,23 @@ The walker has no old 100-track, 64-signal or presentation-row completion cap. W
 
 The collector reads native geometry and sign metadata without adding sign colliders or forcing scene streaming. Native placement capture preserves exact source identity. Late enablement validates native sign recipes against observed signs, with unmatched/ambiguous data reported explicitly. See [native sign association](docs/NATIVE_SIGN_ASSOCIATION.md).
 
-## Candidate status
+## Release 0.5.7
+
+Version **0.5.7** replaces four blocking cold sign-discovery queries with an incremental native
+scene-hierarchy walk (at most 256 work steps / 0.5 ms per shared Update). Captured signs, route
+changes and bounded maintenance continue while discovery reports partial coverage. Exact matching,
+late enablement, optional-activation recovery and existing future-placement observers are retained.
+The retained 0.5.6 log localizes the 640 ms collection interval to this census path; a fresh game
+run must establish the improvement. Separate rendering stalls are not explained by this evidence.
+
+All map boards now share a strip below the profile, filling its first row before using a second
+for overlaps. Two reserved rows prevent content jumping. Speed backboards fit their actual digits;
+one separate `+N` badge counts dense overflow. All observations remain in the list and inspector.
+List speed numbers use the same green / yellow through +5 km/h / red above +5 comparison, including
+independent dual readings. The existing shared telemetry supplies speed even in list-only mode.
+James reports the current build looks good in gameplay. The public ZIP includes the agreed
+credits and full MIT notices. Automated checks and remaining runtime limits are recorded in
+[validation](docs/VALIDATION.md); the earlier candidate notes below are historical.
 
 Candidate **0.5.6** fixes speed colouring after route publication. The sign collector and moving
 view already retained numeric limits, but the shared publication merge dropped both speed fields.

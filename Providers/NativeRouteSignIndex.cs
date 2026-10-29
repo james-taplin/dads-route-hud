@@ -1,12 +1,14 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using DV.Signs;
 using HarmonyLib;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityModManagerNet;
 
 namespace DvMod.HeadsUpDisplay
@@ -54,6 +56,13 @@ namespace DvMod.HeadsUpDisplay
         private static int refreshCursor, refreshRemaining, trackCursor, tracksRemaining;
         private static Type? observedDoubleTrackType;
         private static bool observedReady;
+        private static readonly Queue<Scene> discoveryScenes = new Queue<Scene>();
+        private static readonly HashSet<int> queuedScenes = new HashSet<int>();
+        private static IEnumerator<int>? discovery;
+        private static float nextOptionalCheck;
+        private static bool discoveryChanged;
+
+        public static bool DiscoveryComplete => observedReady && discovery == null && discoveryScenes.Count == 0;
 
         public static long SnapshotRevision { get; private set; }
         public static IReadOnlyList<string> Diagnostics => problems.OrderBy(value => value, StringComparer.Ordinal).ToArray();
@@ -66,7 +75,8 @@ namespace DvMod.HeadsUpDisplay
                 var unmatchedPlans = planCounts.Values.Sum(value => value.Unmatched);
                 return "Observed native signs; " + matchedPlans + " validated plan matches; " + unmatchedPlans
                     + " unmatched plans; " + unassigned + " scene roots unassociated"
-                    + (problems.Count == 0 && unmatchedPlans == 0 && unassigned == 0 ? "" : "; coverage partial");
+                    + (!DiscoveryComplete ? "; scene discovery pending; coverage partial"
+                        : problems.Count == 0 && unmatchedPlans == 0 && unassigned == 0 ? "" : "; coverage partial");
             }
         }
 
@@ -74,9 +84,10 @@ namespace DvMod.HeadsUpDisplay
         {
             if (track == null) return Array.Empty<NativeRouteSign>();
             EnsureObservedRoots();
-            Prune();
             if (watched.Add(track)) { watchedTracks.Add(track); track.TrackPointsUpdated += OnTrackPointsUpdated; }
-            if (bootstrapped.Add(track))
+            // An incomplete census must never freeze a negative recipe result.
+            // Captured placements remain readable immediately, without advancing discovery here.
+            if (DiscoveryComplete && bootstrapped.Add(track))
                 using (HudTimings.Measure(HudTimingStage.SignBootstrap)) Bootstrap(track);
             if (cache.TryGetValue(track, out var saved)) return saved;
             var entries = new List<NativeRouteSign>();
@@ -109,20 +120,25 @@ namespace DvMod.HeadsUpDisplay
 
         public static void Prune()
         {
-            if (!observedReady) return;
+            EnsureObservedRoots();
+            if (Time.realtimeSinceStartup >= nextOptionalCheck)
+            {
+                nextOptionalCheck = Time.realtimeSinceStartup + 5;
+                RefreshOptionalPlacer();
+            }
+            AdvanceDiscovery();
             using (HudTimings.Measure(HudTimingStage.SignMaintenance))
             {
                 if (refreshRemaining == 0 && tracksRemaining == 0)
                 {
                     if (Time.realtimeSinceStartup < nextPrune) return;
                     nextPrune = Time.realtimeSinceStartup + 5;
-                    RefreshOptionalPlacer();
                     refreshCursor = trackCursor = 0;
                     refreshRemaining = observedRoots.Count;
                     tracksRemaining = watchedTracks.Count;
                 }
-                // One collector step must not reread thousands of roots. Finish this
-                // sweep across subsequent steps without truncating the retained index.
+                // Continue across shared Update calls without truncating the retained
+                // index or suspending known-root maintenance behind cold discovery.
                 using (HudTimings.Measure(HudTimingStage.SignRootRefresh))
                     for (var work = 0; work < 32 && refreshRemaining > 0 && refreshCursor < observedRoots.Count; work++)
                     {
@@ -162,6 +178,11 @@ namespace DvMod.HeadsUpDisplay
             observed.Clear(); observedById.Clear(); observedRoots.Clear(); watchedTracks.Clear(); unassociatedRoots.Clear();
             problems.Clear(); planCounts.Clear(); placers.Clear();
             observedReady = false;
+            discovery?.Dispose();
+            discovery = null;
+            discoveryScenes.Clear(); queuedScenes.Clear();
+            nextOptionalCheck = 0;
+            discoveryChanged = false;
             observedDoubleTrackType = null;
             refreshCursor = refreshRemaining = trackCursor = tracksRemaining = 0;
             nextPrune = 0;
@@ -314,16 +335,11 @@ namespace DvMod.HeadsUpDisplay
         private static void EnsureObservedRoots()
         {
             if (observedReady) return;
-            // Existing roots require one late-enable census. Both supported native
-            // placers subsequently pass every generated root through ObservePlacement.
-            using (HudTimings.Measure(HudTimingStage.SignDiscoveryNativePlacers))
-                foreach (var placer in UnityEngine.Object.FindObjectsOfType<SignPlacer>()) AddPlacer(placer);
             var doubleTrack = DoubleTrackPlacerType();
-            if (doubleTrack != null)
-                DiscoverOptionalPlacers(doubleTrack);
-            DiscoverExistingRoots();
+            if (doubleTrack != null) EnsureOptionalObserver(doubleTrack);
             observedDoubleTrackType = doubleTrack;
             observedReady = true;
+            QueueLoadedScenes();
         }
         private static void RefreshOptionalPlacer()
         {
@@ -332,19 +348,132 @@ namespace DvMod.HeadsUpDisplay
             observedDoubleTrackType = type;
             if (type != null)
             {
-                DiscoverOptionalPlacers(type);
+                EnsureOptionalObserver(type);
                 // The optional patch may have been unavailable at HUD load. Recover
                 // its already-created roots once when that source becomes available.
-                DiscoverExistingRoots();
+                QueueLoadedScenes();
             }
             InvalidateUnassociatedPlans();
             SnapshotRevision++;
         }
-        private static void DiscoverOptionalPlacers(Type type)
+        private static void QueueScene(Scene scene)
         {
-            EnsureOptionalObserver(type);
-            using (HudTimings.Measure(HudTimingStage.SignDiscoveryDoubleTrackPlacers))
-                foreach (var placer in UnityEngine.Object.FindObjectsOfType(type).OfType<Component>()) AddPlacer(placer);
+            if (scene.IsValid() && scene.isLoaded && queuedScenes.Add(scene.handle))
+            {
+                discoveryScenes.Enqueue(scene);
+            }
+        }
+
+        private static void QueueLoadedScenes()
+        {
+            // Native and DoubleTrack signs default to this existing parent. Its scene
+            // also covers a persistent origin hierarchy excluded from sceneCount.
+            var origin = DV.OriginShift.OriginShift.parentContainer;
+            if (origin != null) QueueScene(origin.gameObject.scene);
+            foreach (var placer in placers) if (placer != null) QueueScene(placer.gameObject.scene);
+            // Snapshot loaded scenes only, as the old census did. Future generated
+            // signs arrive through the existing placement observers.
+            for (var i = 0; i < SceneManager.sceneCount; i++) QueueScene(SceneManager.GetSceneAt(i));
+        }
+
+        private static void AdvanceDiscovery()
+        {
+            if (DiscoveryComplete) return;
+            using (HudTimings.Measure(HudTimingStage.SignDiscovery))
+            {
+                var started = Stopwatch.GetTimestamp();
+                // Both edges and components yield. A broad or deep hierarchy cannot
+                // enqueue all its descendants in one synchronous collection step.
+                for (var work = 0; work < 256; work++)
+                {
+                    if (discovery == null)
+                    {
+                        if (discoveryScenes.Count == 0) break;
+                        var scene = discoveryScenes.Dequeue();
+                        queuedScenes.Remove(scene.handle);
+                        discovery = DiscoverScene(scene).GetEnumerator();
+                    }
+                    if (!discovery.MoveNext())
+                    {
+                        discovery.Dispose(); discovery = null;
+                        if (discoveryScenes.Count == 0 && discoveryChanged)
+                        {
+                            InvalidateUnassociatedPlans();
+                            SnapshotRevision++;
+                            discoveryChanged = false;
+                            break;
+                        }
+                    }
+                    if ((Stopwatch.GetTimestamp() - started) * 1000d / Stopwatch.Frequency >= 0.5) break;
+                }
+            }
+        }
+
+        private struct ChildCursor
+        {
+            public Transform Parent, Previous;
+            public int Index, Count;
+        }
+
+        private static IEnumerable<int> DiscoverScene(Scene scene)
+        {
+            if (!scene.IsValid() || !scene.isLoaded) yield break;
+            var roots = new List<GameObject>(scene.rootCount + 1);
+            // This native call only enumerates this scene's roots, never its subtree.
+            using (HudTimings.Measure(HudTimingStage.SignSceneRoots)) scene.GetRootGameObjects(roots);
+            yield return 0;
+            var components = new List<Component>();
+            var stack = new Stack<ChildCursor>();
+            var visited = new HashSet<int>();
+            foreach (var root in roots)
+            {
+                if (root == null) { yield return 0; continue; }
+                var node = root.transform;
+                while (true)
+                {
+                    if (node != null && visited.Add(node.GetInstanceID()) && node.gameObject.activeInHierarchy)
+                    {
+                        node.GetComponents(components);
+                        yield return 0;
+                        foreach (var component in components)
+                        {
+                            if (component != null)
+                            {
+                                if (component is SignPlacer
+                                    || observedDoubleTrackType != null && observedDoubleTrackType.IsInstanceOfType(component))
+                                    AddPlacer(component);
+                                if (component is SignDebug debug) AddObserved(debug.gameObject, debug.text);
+                                else if (component is SignGeneratorData data) AddObserved(data.gameObject, "");
+                            }
+                            yield return 0;
+                        }
+                        components.Clear();
+                        if (node != null) stack.Push(new ChildCursor { Parent = node });
+                    }
+                    node = null;
+                    while (stack.Count > 0 && node == null)
+                    {
+                        var cursor = stack.Pop();
+                        if (cursor.Parent != null)
+                        {
+                            var count = cursor.Parent.childCount;
+                            // Removal/reparenting can shift a not-yet-visited sibling.
+                            // Restart that parent's cursor and deduplicate visited nodes.
+                            if (cursor.Index > 0 && (count != cursor.Count || cursor.Previous == null
+                                || cursor.Previous.parent != cursor.Parent || cursor.Previous.GetSiblingIndex() != cursor.Index - 1))
+                                cursor.Index = 0;
+                            if (cursor.Index < count)
+                            {
+                                node = cursor.Parent.GetChild(cursor.Index++);
+                                cursor.Previous = node; cursor.Count = count;
+                                stack.Push(cursor);
+                            }
+                        }
+                        yield return 0;
+                    }
+                    if (node == null) break;
+                }
+            }
         }
         private static void EnsureOptionalObserver(Type type)
         {
@@ -364,24 +493,11 @@ namespace DvMod.HeadsUpDisplay
             catch (Exception exception)
             { Problem("DoubleTrack placement observer unavailable: " + exception.GetBaseException().Message + "; coverage partial"); }
         }
-        private static void DiscoverExistingRoots()
-        {
-            SignDebug[] debugRoots;
-            SignGeneratorData[] generatedRoots;
-            using (HudTimings.Measure(HudTimingStage.SignDiscoveryDebugRoots))
-                debugRoots = UnityEngine.Object.FindObjectsOfType<SignDebug>();
-            using (HudTimings.Measure(HudTimingStage.SignDiscoveryGeneratorRoots))
-                generatedRoots = UnityEngine.Object.FindObjectsOfType<SignGeneratorData>();
-            using (HudTimings.Measure(HudTimingStage.SignIndexRoots))
-            {
-                foreach (var debug in debugRoots) AddObserved(debug.gameObject, debug.text);
-                foreach (var data in generatedRoots) AddObserved(data.gameObject, "");
-            }
-        }
         private static void AddPlacer(Component placer)
         {
             if (placers.Contains(placer)) return;
             placers.Add(placer);
+            discoveryChanged = true;
             if (observedReady && unassociatedRoots.Count > 0) InvalidateUnassociatedPlans();
         }
         private static void InvalidateUnassociatedPlans()
@@ -392,10 +508,17 @@ namespace DvMod.HeadsUpDisplay
         private static void AddObserved(GameObject root, string text)
         {
             var id = root.GetInstanceID();
-            if (observedById.ContainsKey(id)) return;
+            if (observedById.TryGetValue(id, out var existing))
+            {
+                // Component order is not guaranteed. Preserve debug-only text when
+                // an empty generator component was encountered first.
+                if (existing.Parts == null && text.Length > 0 && existing.Text != text) existing.Refresh();
+                return;
+            }
             var entry = new ObservedRoot(root, id, observedRoots.Count, text);
             observedById[id] = entry;
             observedRoots.Add(entry);
+            discoveryChanged = true;
             if (!sources.ContainsKey(id)) unassociatedRoots.Add(id);
             var key = new Cell(entry.Position);
             if (!observed.TryGetValue(key, out var group)) observed[key] = group = new List<ObservedRoot>();

@@ -9,6 +9,7 @@ namespace DvMod.HeadsUpDisplay
     {
         HudUpdate, RouteUpdate, RouteWalk, RouteCollectStep, RouteFinish, RoutePublish, RouteMerge, RouteShift,
         RouteProfile, OptionalSignals, JunctionNames, ListLayout, RouteTraffic,
+        SignDiscovery, SignSceneRoots,
         SignDiscoveryNativePlacers, SignDiscoveryDoubleTrackPlacers, SignDiscoveryDebugRoots,
         SignDiscoveryGeneratorRoots, SignIndexRoots, SignMaintenance, SignRootRefresh,
         SignBootstrap, SignProjection, Count

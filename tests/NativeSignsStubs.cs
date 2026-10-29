@@ -58,7 +58,8 @@ namespace UnityEngine
         { FindCalls++; return scene.OfType<T>().Where(value => value != null).ToArray(); }
         public static Object[] FindObjectsOfType(Type type)
         { FindCalls++; return scene.Where(value => type.IsInstanceOfType(value) && value != null).ToArray(); }
-        public static void ClearScene() { scene.Clear(); FindCalls = ComponentReads = 0; }
+        public static void ClearScene()
+        { scene.Clear(); FindCalls = ComponentReads = 0; SceneManagement.SceneManager.Clear(); DV.OriginShift.OriginShift.parentContainer = null; }
         public static bool operator ==(Object? a, Object? b)
         {
             var absentA = a is null || a.Destroyed;
@@ -74,19 +75,52 @@ namespace UnityEngine
         public GameObject gameObject = null!;
         public Transform transform => gameObject.transform;
         public T? GetComponent<T>() where T : Component => gameObject.GetComponent<T>();
+        public void GetComponents<T>(List<T> result) where T : Component => gameObject.GetComponents(result);
     }
     public class MonoBehaviour : Component { }
     public sealed class GameObject : Object
     {
         private readonly Dictionary<Type, Component> components = new Dictionary<Type, Component>();
-        public readonly Transform transform = new Transform();
-        public GameObject(string objectName = "Test root") => name = objectName;
+        public readonly Transform transform;
+        public bool activeSelf = true;
+        public bool activeInHierarchy => activeSelf && (transform.parent == null || transform.parent.gameObject.activeInHierarchy);
+        public SceneManagement.Scene scene;
+        public GameObject(string objectName = "Test root")
+        {
+            name = objectName;
+            transform = new Transform { gameObject = this };
+            scene = SceneManagement.SceneManager.Default;
+            scene.Roots.Add(this);
+        }
         public T Add<T>(T component) where T : Component
         { component.gameObject = this; components[typeof(T)] = component; return component; }
         public T? GetComponent<T>() where T : Component
         { Object.ComponentReads++; return components.TryGetValue(typeof(T), out var value) && value != null ? (T)value : null; }
+        public void GetComponents<T>(List<T> result) where T : Component
+        {
+            Object.ComponentReads++;
+            result.Clear();
+            if (transform is T match) result.Add(match);
+            result.AddRange(components.Values.OfType<T>().Where(value => value != null));
+        }
     }
-    public sealed class Transform { public Vector3 position; public Quaternion rotation; }
+    public sealed class Transform : Component
+    {
+        public Vector3 position; public Quaternion rotation;
+        private readonly List<Transform> children = new List<Transform>();
+        public Transform? parent;
+        public int childCount => children.Count;
+        public Transform GetChild(int index) => children[index];
+        public int GetSiblingIndex() => parent == null ? gameObject.scene.Roots.IndexOf(gameObject) : parent.children.IndexOf(this);
+        public void SetParent(Transform? value)
+        {
+            if (parent != null) parent.children.Remove(this);
+            else gameObject.scene.Roots.Remove(gameObject);
+            parent = value;
+            if (value != null) { value.children.Add(this); gameObject.scene = value.gameObject.scene; }
+            else gameObject.scene.Roots.Add(gameObject);
+        }
+    }
     public struct Vector3 : IEquatable<Vector3>
     {
         public float x, y, z;
@@ -119,6 +153,45 @@ namespace UnityEngine
     }
     public static class Mathf { public static int FloorToInt(float value) => (int)Math.Floor(value); }
     public static class Time { public static float realtimeSinceStartup; }
+}
+namespace UnityEngine.SceneManagement
+{
+    public enum LoadSceneMode { Single, Additive }
+    public struct Scene
+    {
+        public int handle;
+        public bool isLoaded;
+        public List<UnityEngine.GameObject> Roots;
+        public bool IsValid() => Roots != null;
+        public int rootCount => Roots.Count;
+        public void GetRootGameObjects(List<UnityEngine.GameObject> result)
+        { SceneManager.RootReads++; result.Clear(); result.AddRange(Roots.Where(root => root != null)); }
+    }
+    public static class SceneManager
+    {
+        public static Scene Default;
+        private static readonly List<Scene> scenes = new List<Scene>();
+        public static int RootReads;
+        private static int nextHandle;
+        private static Action<Scene, LoadSceneMode>? loaded;
+        public static int Subscribers => loaded?.GetInvocationList().Length ?? 0;
+        public static event Action<Scene, LoadSceneMode> sceneLoaded { add => loaded += value; remove => loaded -= value; }
+        public static int sceneCount => scenes.Count;
+        public static Scene GetSceneAt(int i) => scenes[i];
+        public static Scene AddScene(bool listed = true)
+        {
+            var result = new Scene { handle = ++nextHandle, isLoaded = true, Roots = new List<UnityEngine.GameObject>() };
+            if (listed) scenes.Add(result);
+            return result;
+        }
+        public static void Load(Scene scene) => loaded?.Invoke(scene, LoadSceneMode.Additive);
+        public static void Clear()
+        { scenes.Clear(); Default = AddScene(); RootReads = 0; }
+    }
+}
+namespace DV.OriginShift
+{
+    public static class OriginShift { public static UnityEngine.Transform? parentContainer; }
 }
 namespace UnityModManagerNet
 {

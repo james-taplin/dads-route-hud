@@ -1,6 +1,10 @@
 # Validation and acceptance
 
-Automated build/core checks pass as recorded in HANDOVER.md. Runtime and visual acceptance are **not run**. This is a compiled test candidate, not a release-readiness claim.
+Automated build/core checks pass as recorded in HANDOVER.md. On 29 October 2026 James reported
+that everything in the current 0.5.7 build was looking good and authorized finishing the public
+ZIP and pushing main. This is user-reported gameplay acceptance; it is not an independently
+measured frame-time comparison or an exhaustive check of every configuration. Earlier pending
+candidate procedures below remain useful regression checks.
 
 ## Loaded candidate check - 22 October 2026
 
@@ -51,7 +55,31 @@ git diff --check
 ./tests/Install.Tests.ps1
 ```
 
-Expect zero build warnings/errors and 853 checks across ten suites: 14 driving, 299 route/layout/naming, 113 capture-service lifecycle plus 22 HUD timing, 102 native-geometry, 52 native station/destination, 100 production sign-index, 58 actual optional-adapter, 33 car-list, 45 telemetry/registry and 15 native traffic. The installer fixtures add 12 assertions and the PE contract audit matches 68/68 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
+Expect zero build warnings/errors and 895 checks across ten suites: 14 driving, 313 route/layout/naming, 118 capture-service lifecycle plus 22 HUD timing, 102 native-geometry, 52 native station/destination, 117 production sign-index, 58 actual optional-adapter, 33 car-list, 51 telemetry/registry and 15 native traffic. The installer fixtures add 12 assertions and the PE contract audit matches 69/69 members. Boundary suites compile actual production code against native/optional/UI test doubles; they do not run Unity. CarList and telemetry use the pinned MIT QuantitiesNet source; they need the submodule, not proprietary references. Run installer fixtures after packaging; they write only below build/, never the actual game. Inspect reference/PE audit, package allowlist/identity/hash and preservation manifest. No static or mandatory optional dependencies; no game/Unity/UMM/Harmony/optional DLLs in the ZIP. Building must leave installed HUD/settings and Params.xml unchanged.
+
+## 0.5.7 staged collector and board-strip candidate - runtime acceptance pending
+
+This candidate must not be installed automatically: James requested staging only. Preserve the
+installed 0.5.6 DLL, Settings.xml, UMM flags and cache. After a later explicitly requested install,
+verify the new DLL/cache identity before comparing timings. Use the same 20,000 m range/save,
+close UMM and observe a stationary 90-second run, then a drive/reversal/optional refresh. Compare
+inclusive SignDiscovery/SignSceneRoots, RouteCollectStep and HudUpdate reports; do not add parents
+and children or claim the separate rendering stalls are solved. No four global sign-type queries
+should occur. Record initial discovery separately from recurring warm work. Root enumeration and
+individual native calls still cannot be pre-empted. The synthetic hierarchy tests are not Unity
+frame-time evidence. The before-fix cold-search regression failed against 0.5.6, then passes with
+zero such calls; captured signs, refresh/reversal and known-root maintenance also progress during
+pending discovery.
+
+Check overview, close-up and atlas at narrow/wide widths and fonts 10-28: all boards below the
+profile, one shared first row and collision-only second row, compact digit-sized speed backboards,
+one explicit +N overflow badge, no adjacent-tile spill or duplicate shared boundary board. Every
+observation remains in the scroll list/inspector. Compare visible single/dual list numbers with
+actual speed: green at/below limit, yellow positive excess through five, red above five; unknown
+speed is neutral and opposite-facing limits are not compared. Repeat with graph sections hidden,
+stationary and reverse travel. Colour changes must preserve list glyphs/wrapping/heights; fixed
+black footer, job/loco/consist position, green own/orange other cars and saved windows remain.
+No game launch, installation or new visual/performance acceptance is claimed by automated checks.
 
 ## 0.5.6 speed-colour publication regression - runtime acceptance pending
 

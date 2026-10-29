@@ -20,6 +20,11 @@ namespace DvMod.HeadsUpDisplay
         private static float previousSpeed;
         private static float? acceleration;
 
+        // Reuse the existing native speed sample for maps and event-list colours,
+        // including event-list-only mode. Presentation never reads game state itself.
+        public static double? SpeedKph => currentCar != null && !float.IsNaN(previousSpeed) && !float.IsInfinity(previousSpeed)
+            ? Math.Abs((double)previousSpeed) * 3.6 : (double?)null;
+
         public static void Reset()
         {
             currentCar = null;

@@ -913,3 +913,108 @@ dependency-copy failure. Settings and Params.xml remained byte-identical; 20,000
 HUD enabled and Driving HUD disabled. Zero HUD shadow caches remain until next normal launch.
 No game launch or new runtime colour observation is claimed; no push/release. This post-install
 record leaves the validated ZIP unchanged. Changes are saved on codex/fix-route-speed-colours.
+
+## 0.5.7 staged collector spike and board-strip update - 27 October 2026
+
+James authorized investigation of the 640 ms collection spike in this HUD session, preserving
+current features/layout, then explicitly requested staging only (no install), all boards below
+the graph in one preferred row/second on overlap, compact speed backboards and live list colours.
+Source branch: codex/incremental-sign-discovery, based on 0834e11 (0.5.6). No push/release/game launch.
+
+Retained evidence is copied under build/evidence/collector-20261027/Player-0.5.6.log, SHA256
+553B2A6FBB65AF3A482CD805E0E966A341E08CADBFD787D43070457959351FCE. Line 816 identifies 0.5.6;
+line 9246 records HudUpdate max642.77 ms, RouteUpdate641.46 and RouteCollectStep640.03. These
+inclusive maxima must not be added. The same row has one call apiece for initial scene discovery:
+native placers165.63 ms, DoubleTrack placers153.35, debug roots152.09 and generator roots142.31.
+Code confirms all four global FindObjectsOfType queries run sequentially inside the first
+EnsureTrack/collection MoveNext. This identifies the blocking HUD code path; it does not determine
+the deepest native-engine/GC/scheduling cause or explain separate end-of-render stalls. The mode-2
+665.5 ms ScriptRunBehaviourUpdate observation remains only a candidate correspondence, not a
+proven same-frame join. The 20 km horizon is not established as a hardware limit by these data.
+
+Native-first checks: existing native/DoubleTrack placers parent roots under parentTo or the native
+OriginShift.parentContainer. Native SignPlacer has no complete retained sign registry. DoubleTrack's
+public signs list, consumed by working Toolbox code, is overwritten per placer and cannot alone
+preserve native/local-placer/late-enable coverage. Working local native scene-hierarchy scans and
+installed contracts support the smaller general discovery replacement, with no additional DLL,
+dependency, gameplay mutation or new Harmony observer.
+
+The four synchronous global searches are removed. One queued snapshot of loaded scenes plus
+existing origin/known-placer scenes is walked incrementally through individual component/child
+steps, at most256 work steps /0.5 ms per shared Update maintenance call. It never pushes an entire
+wide subtree at once; child cursors handle sibling removal/reparenting and visited nodes prevent
+duplicate traversal. Persistent native sign hierarchies are seeded via the existing origin scene.
+EnsureTrack never advances discovery. Existing placement observers still capture future generation;
+ordinary scenery loads do not restart the census. Optional activation installs the same checked
+observer and requests one incremental recovery pass. Exact late-enable recipes wait for completed
+discovery; new evidence invalidates caches/revisions for another capture. Captured signs and normal
+route refresh/reversal continue with explicit partial coverage. Known-root maintenance continues
+independently, including edits/destruction during discovery. Per-scene root enumeration, individual
+component/recipe/projection calls and engine pauses remain synchronous; the cooperative limit is
+not a hard frame-time guarantee. New SignDiscovery and SignSceneRoots stage reports distinguish them.
+
+The before-fix production cold-search regression failed against 0.5.6 with "Cold route collection
+must not issue synchronous whole-world type searches". It now verifies zero such calls. Additional
+boundary regressions cover broad/deep hierarchies,600 census-only sign roots, all parts/dual speeds/
+directions/source IDs, native placement in a newly loaded scene, shifted sibling indices, active
+semantics, pending/reset/persistent scenes, component-order-independent debug-only evidence,
+maintenance edits/removal while discovery is pending, and route refresh/reversal without waiting
+for global discovery. These are native boundary doubles, not measured Unity frame-time improvement.
+
+An independent agent reviewed discovery and caught two issues in the first draft: gating route
+capture on global census completion and deferring known-root maintenance. Both were removed and
+regressions added. Scenery-triggered recurring censuses were also removed to preserve original
+initial/optional-only behavior. Final collector review found no further blocking issue.
+
+At James's subsequent request, all visible map board kinds now pack below the profile into a
+shared preferred row and collision-only second row. Both rows reserve constant height to prevent
+list movement. Numeric backboards measure only actual digits/dual values plus padding; overflow
+gets one separate counted badge after at most one packing reflow. Full observations remain in
+list/inspector, with existing filters/opposite handling, half-open atlas boundaries, axes, green
+own consist and orange other cars. The agent implemented/reviewed this map file; the parent reviewed
+its final diff. Shared pure packing tests cover mixed board kinds, first/second rows, gaps/counts,
+tile boundaries, filters and narrow clipping. Runtime visual acceptance remains pending.
+
+NativeTelemetry exposes its existing sampled speed in km/h (absolute native m/s times3.6), so
+list-only mode also compares speed without extra native reads. List numbers recolour independently
+per dual value: green at/below, yellow positive excess through5 km/h, red above5; unknown neutral,
+opposing limits not compared. Only visible rows format changed colour states, cached by source and
+comparison state. Existing measured glyphs, boldness, wrapping and row heights stay fixed; colour
+changes do not rebuild list layout. Current footer/window/job/consist layout and settings stay in place.
+
+The installed 0.5.6 DLL/settings/UMM/cache baseline is recorded in build/evidence/collector-20261027/
+baseline.json for final preservation comparison. The user explicitly said stage only; do not install
+this candidate automatically. Fresh runtime/performance/visual acceptance belongs to James's later
+test with loaded build/cache verification and the same20 km range. Automated validation follows.
+
+Full Validate.ps1 passes with zero game-reference compiler warnings/errors and895 assertions
+across10 suites:14 driving,313 route core,118 service lifecycle+22timing,102geometry,52names,
+117sign index,58optional signals,33car list,51telemetry/registry and15traffic. The PE-only native/
+optional contract audit matches69/69; the14-file package identity/reference audit and12isolated
+installer assertions pass, along with git diff --check. No game code is executed by metadata audits.
+The fixture install is confined below build/install-tests-* and does not touch the actual game.
+All16 actual installed HUD files (including Settings.xml/cache) and UMM Params.xml were compared
+against baseline hashes after full validation and remained byte-identical. Installed version stays
+0.5.6; this0.5.7 ZIP/source is staged only. A final documentation-only repack retains the validated
+production code, with the artifact audit and installer fixtures rerun against that final ZIP.
+
+James subsequently explicitly authorized installation of0.5.7 on27 October. Installed the same
+audited ZIP (SHA256904C483D481DE9B87498540A4C3C262DC4A9A2450B992991A5558601629B1127),
+with the game closed and all14 package files verified. Assembly0.5.7.0; installed DLL SHA256
+448B288BB04314CF2E77FD586B8B125BACD9FDC9A0667BDDE3F89E2DE0DD04D8.
+Backup/receipt: artifacts/backups/upgrade-0.5.7-3362106012e6420e9a79d0e03d9f96be/.
+Settings.xml and UMM Params.xml remain byte-identical to the backup; Route HUD enabled=true,
+Driving HUD enabled=false. The old HUD shadow cache was backed up and cleared; zero remain.
+No game launch or runtime acceptance is claimed. This post-install record does not alter the ZIP.
+
+## Public 0.5.7 credits and main handoff - 29 October 2026
+
+James reports everything is looking good in the current build and authorized updating the
+release ZIP with the agreed CREDITS AND LICENSE wording and pushing the finished 0.5.7 to main.
+CREDITS.md now uses that exact wording; original LICENSE, QuantitiesNet.LICENSE and full
+THIRD_PARTY_NOTICES.txt remain. README and validation distinguish this user-reported gameplay
+acceptance from an independent performance comparison. Historical candidate/install records
+above remain historical. No production behavior, installed files, settings or UMM flags change
+as part of this credits/public-source handoff. The final package is rebuilt/audited from the
+finished source, with its final hash in artifacts/DadsRouteHUD-0.5.7.zip.sha256 and the validation
+receipt. Main is advanced without force; no GitHub Release or tag is created by this request.

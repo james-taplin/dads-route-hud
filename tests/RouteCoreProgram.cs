@@ -89,6 +89,43 @@ internal static class RouteCoreProgram
         Check(RouteMapLabels.Arrange(new[] { new RouteEvent("opposed", 10, RouteEventKind.Speed, "80", appliesToTravel: false, speedLimitKph: 80) },
             0, 1000, 100, 3, _ => 30).Count == 0, "Opposing limits cannot receive a misleading travel speed comparison");
         Check(RouteMapLabels.Arrange(dense, 0, 1000, 100, 0, _ => 30).Count == 0, "No annotation lanes is handled without invalid indexing");
+        var mixed = new[] {
+            new RouteEvent("speed", 50, RouteEventKind.Speed, "80 km/h", speedLimitKph: 80),
+            new RouteEvent("signal", 250, RouteEventKind.Signal, "S"),
+            new RouteEvent("points", 450, RouteEventKind.Junction, "J"),
+            new RouteEvent("grade", 650, RouteEventKind.Grade, "-1 %"),
+            new RouteEvent("track", 850, RouteEventKind.Track, "T") };
+        var boards = RouteMapLabels.ArrangeBoards(mixed, 0, 1000, 200, 2, _ => 16, _ => true);
+        Check(boards.Count == 5 && boards.All(p => p.Lane == 0), "All sparse board kinds share only the first row");
+        Check(boards.All(p => p.Width == 16), "Individual backboards use their measured glyph width without a per-board overflow reserve");
+        boards = RouteMapLabels.ArrangeBoards(mixed, 0, 1000, 40, 2, _ => 16, _ => true);
+        Check(boards.Any(p => p.Lane == 1) && boards.Sum(p => 1 + p.Additional) == mixed.Length,
+            "Only overlapping boards use the second row; dense overflow still accounts for every event");
+        Check(boards.GroupBy(p => p.Lane).All(g => g.Zip(g.Skip(1), (a, b) => a.X + a.Width + 3 <= b.X).All(ok => ok)),
+            "Mixed board rows preserve measured gaps without overlap");
+        Check(RouteMapLabels.ArrangeBoards(mixed, 0, 250, 100, 2, _ => 16, _ => true, includeEnd: false).Count == 1,
+            "Atlas excludes a shared tile end so boundary boards are not duplicated");
+        Check(RouteMapLabels.ArrangeBoards(mixed, 0, 1000, 100, 2, _ => 16, item => item.Kind == RouteEventKind.Signal).Count == 1,
+            "Unified board packing respects the existing event filters");
+        Check(RouteMapLabels.ArrangeBoards(mixed, 0, 1000, 1, 2, _ => 30, _ => true).All(p => p.X == 0 && p.Width == 1),
+            "Very narrow map cells clip backboards inside their tile");
+        var listGreen = RouteListText.Description(board, 40);
+        var listYellow = RouteListText.Description(board, 45);
+        var listRed = RouteListText.Description(board, 45.01);
+        Check(listGreen.Contains("<color=#59FF73>40</color>") && listGreen.Contains("<color=#59FF73>60</color>"),
+            "List speed numbers are green at or under each board value");
+        Check(listYellow.Contains("<color=#FFD626>40</color>") && listYellow.Contains("<color=#59FF73>60</color>"),
+            "List dual-board values independently show yellow through five km/h over");
+        Check(listRed.Contains("<color=#FF4040>40</color>") && listRed.Contains("<color=#59FF73>60</color>"),
+            "List dual-board values independently show red beyond five km/h over");
+        Check(RouteListText.Description(board, null).Contains("#B3BFCC"), "Missing telemetry leaves list comparisons explicitly neutral");
+        var opposite = new RouteEvent("opposed", 10, RouteEventKind.Speed, "40 km/h", appliesToTravel: false, speedLimitKph: 40);
+        Check(RouteListText.Description(opposite, 90) == RouteListText.Description(opposite), "Opposing limits cannot show misleading overspeed comparisons");
+        var glyphs = new Func<string, string>(value => System.Text.RegularExpressions.Regex.Replace(value, "<[^>]+>", ""));
+        Check(glyphs(listGreen) == glyphs(listRed) && glyphs(listRed) == glyphs(RouteListText.Description(board)),
+            "Live list-colour changes preserve measured glyphs and cannot reflow the rows");
+        Check(!RouteListText.SameDescription(board, new RouteEvent("dual", 100, RouteEventKind.Speed, board.Label,
+            speedLimitKph: 50, alternateSpeedLimitKph: 60)), "Typed speed metadata changes invalidate the cached coloured description");
 
         var projector = new RouteTrafficProjector<string>(new[] {
             new RouteInterval<string>("main", true, 100, 500, 0, 400),

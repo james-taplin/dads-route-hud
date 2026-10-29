@@ -125,8 +125,10 @@ namespace DvMod.HeadsUpDisplay
         private readonly List<(string label, string value, float labelWidth, float valueWidth)> metrics =
             new List<(string, string, float, float)>();
         private readonly List<List<int>> metricRows = new List<List<int>>();
-        private readonly List<(string distance, string description, float height)> eventRows =
-            new List<(string, string, float)>();
+        private readonly List<(string distance, string description, float height, RouteEvent source)> eventRows =
+            new List<(string, string, float, RouteEvent)>();
+        private readonly Dictionary<string, (RouteEvent source, int state, string text)> eventSpeedText =
+            new Dictionary<string, (RouteEvent, int, string)>(StringComparer.Ordinal);
         private Dictionary<string, (RouteEvent source, string description, float height)> eventRowCache =
             new Dictionary<string, (RouteEvent, string, float)>(StringComparer.Ordinal);
         private RouteListLayout eventListLayout = new RouteListLayout(Array.Empty<float>());
@@ -319,7 +321,7 @@ namespace DvMod.HeadsUpDisplay
             {
                 var distance = RouteMonitor.EventDistance(item.Distance);
                 var unchanged = eventRowCache.TryGetValue(item.Id, out var cached) && RouteListText.SameDescription(cached.source, item);
-                eventRows.Add((distance, unchanged ? cached.description : RouteListText.Description(item), 0));
+                eventRows.Add((distance, unchanged ? cached.description : RouteListText.Description(item), 0, item));
             }
             eventDistanceWidth = Mathf.Min(eventDistanceWidth, Mathf.Max(1, innerWidth - ColumnSpacing - 1));
             var descriptionWidth = Mathf.Max(1, innerWidth - eventDistanceWidth - ColumnSpacing);
@@ -334,12 +336,13 @@ namespace DvMod.HeadsUpDisplay
                 var height = sameWrapping && eventRowCache.TryGetValue(item.Id, out var cached)
                     && cached.description == row.description ? cached.height
                     : Mathf.Max(fontSize + 6, Styles.TextHeight(row.description, Styles.routeText, eventDescriptionWidth));
-                eventRows[index] = (row.distance, row.description, height);
+                eventRows[index] = (row.distance, row.description, height, item);
                 heights[index] = height + Mathf.Max(3, Styles.Padding);
                 nextRowCache[item.Id] = (item, row.description, height);
             }
             // Only this generation survives: passed or filtered events cannot accumulate in a history cache.
             eventRowCache = nextRowCache;
+            foreach (var id in eventSpeedText.Keys.Where(id => !nextRowCache.ContainsKey(id)).ToArray()) eventSpeedText.Remove(id);
             eventListLayout = new RouteListLayout(heights);
             eventSnapshot = route;
             eventCapturedWidth = innerWidth;
@@ -440,9 +443,24 @@ namespace DvMod.HeadsUpDisplay
             {
                 var row = eventRows[index];
                 var y = area.y + eventListLayout.Top(index);
+                var description = row.description;
+                var item = row.source;
+                if (item.Kind == RouteEventKind.Speed && item.AppliesToTravel && item.SpeedLimitKph.HasValue)
+                {
+                    var speed = NativeTelemetry.SpeedKph;
+                    var state = (int)RouteSpeed.Compare(speed, item.SpeedLimitKph)
+                        | ((int)RouteSpeed.Compare(speed, item.AlternateSpeedLimitKph) << 3);
+                    if (!eventSpeedText.TryGetValue(item.Id, out var cached) || cached.state != state
+                        || !RouteListText.SameDescription(cached.source, item))
+                    {
+                        cached = (item, state, RouteListText.Description(item, speed));
+                        eventSpeedText[item.Id] = cached;
+                    }
+                    description = cached.text;
+                }
                 GUI.Label(new Rect(area.x, y, eventDistanceWidth, row.height), row.distance, Styles.routeDistance);
                 GUI.Label(new Rect(area.x + eventDistanceWidth + ColumnSpacing, y, eventDescriptionWidth, row.height),
-                    row.description, Styles.routeText);
+                    description, Styles.routeText);
             }
         }
         private void CopyTrainSettings()

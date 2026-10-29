@@ -37,6 +37,16 @@ namespace DvMod.HeadsUpDisplay
         }
 
         public static string Number(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+        public static string ColorHex(RouteSpeedState state)
+        {
+            switch (state)
+            {
+                case RouteSpeedState.WithinLimit: return "#59FF73";
+                case RouteSpeedState.SlightlyOver: return "#FFD626";
+                case RouteSpeedState.OverLimit: return "#FF4040";
+                default: return "#B3BFCC";
+            }
+        }
         private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
     }
 }

@@ -1,6 +1,6 @@
 # Project context
 
-Dad's Route HUD 0.5.6 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
+Dad's Route HUD 0.5.7 is the combined compact/driving-strip fork of the MIT Heads-up Display for Derail Valley. Public repository: https://github.com/james-taplin/dads-route-hud. It is published as a fork of mspielberg/dv-hud.
 
 The public source branch starts at original MIT revision 9acf926a2d7c8512ddb85cbf637b3e4a9bfa6f6f and imports the current fork source in one commit. The local development lineage includes Koteq b09fe942ab5118e6aa348a153f686a537a483d0d and Dad's Driving HUD. Koteq's compatibility contributions are retained and credited, but its old committed game DLLs are excluded by not importing that commit's history. QuantitiesNet is pinned at 2b6522cb70df8108af0d96dec6ebdc6c35a673aa. See LICENSING.md and CREDITS.md.
 
@@ -64,6 +64,25 @@ and 0.5.3 stationary improvement require a fresh game run. The 20 km test range 
 
 
 ## Track-ahead clarity update
+
+Version 0.5.7 replaces the initial/optional-activation synchronous sign census with a resumable
+walk of loaded native scene roots and individual component/child steps. Discovery advances only
+in the shared Update maintenance call, at most 256 work steps / 0.5 ms; EnsureTrack cannot advance
+it. Existing origin/known-placer scenes include persistent native sign hierarchies. No scene object,
+gameplay hook, dependency or recurring scenery census is added. Existing placement observers
+retain future generation. Captured signs and normal route capture/reversal/refresh continue during
+explicitly partial discovery; known-root maintenance is independent. Exact late-enable recipes
+wait for completed discovery and retry after new evidence. Native root enumeration and individual
+calls remain synchronous. The retained 0.5.6 timings identify four expensive census queries, not
+the deepest engine cause or an explanation of separate end-of-render stalls.
+
+The requested 0.5.7 presentation moves all board kinds below the profile into one shared packing
+space: first row preferred, second for collisions, fixed two-row height to avoid list movement.
+Actual tokens determine backboard widths; dense overflow has one separate counted badge. Full
+event retention, filters, own/orange-car display, graph axis, window settings and black list footer
+remain. The list recolours only visible speed rows when comparison state changes, without changing
+measured glyphs/heights. NativeTelemetry exposes its existing 0.1-second native speed sample to
+both presentations, so list-only mode works without extra native sampling. No install is requested.
 
 Version 0.5.6 preserves primary/alternate typed speed limits in RouteMonitorService.MergeOptional.
 In 0.5.5 this publication copy omitted those fields, even when no optional mod was available;

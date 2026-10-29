@@ -18,6 +18,7 @@ internal static class RouteServiceProgram
 
     private static void Main()
     {
+        CheckDiscoveryWait();
         var track = new RailTrack();
         var car = new TrainCar();
         foreach (var bogie in car.Bogies) bogie.track = track;
@@ -95,6 +96,38 @@ internal static class RouteServiceProgram
         CheckHudTimings();
         Console.WriteLine(lifecycleChecks + " route-service lifecycle checks and " + (checks - lifecycleChecks)
             + " HUD timing checks passed (native/optional test doubles; not game acceptance).");
+    }
+
+    private static void CheckDiscoveryWait()
+    {
+        var track = new RailTrack();
+        var car = new TrainCar();
+        foreach (var bogie in car.Bogies) bogie.track = track;
+        RouteMonitorService.Reset(); OptionalSignalTelemetry.Reset();
+        NativeRouteSignIndex.DiscoveryComplete = false;
+        var calls = 0;
+        NativeRouteSignIndex.OnEnsureTrack = item => calls++;
+        for (var i = 0; i < 5; i++) Frame(car, 0.1f * i, 10);
+        Check(calls > 0 && RouteMonitorService.Current.IsCollecting && RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Track),
+            "Native collection keeps progressing during cold discovery without gating on unrelated scene hierarchies");
+        Check(RouteMonitorService.Current.EventCoverage.Contains("discovery pending"),
+            "Cold discovery explicitly describes partial observations alongside useful captured events");
+        NativeRouteSignIndex.DiscoveryComplete = true;
+        for (var i = 0; i < 8; i++) Frame(car, 0.5f + i * 0.05f, 10);
+        Check(calls > 0 && RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Track),
+            "Completion resumes the same native route capture");
+        var revision = RouteMonitorService.Current.Revision;
+        NativeRouteSignIndex.DiscoveryComplete = false;
+        for (var i = 0; i < 12; i++) Frame(car, 3 + i * 0.3f, 10);
+        Check(RouteMonitorService.Current.Revision > revision && RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Track),
+            "An ongoing census cannot starve scheduled route refreshes");
+        car.SimController.controlsOverrider.Reverser.Value = 0;
+        for (var i = 0; i < 8; i++) Frame(car, 7 + i * 0.1f, 10);
+        Check(RouteMonitorService.Current.Events.Any(e => e.Kind == RouteEventKind.Track),
+            "A real reversal can capture its new route while scene discovery remains pending");
+        NativeRouteSignIndex.DiscoveryComplete = true;
+        NativeRouteSignIndex.OnEnsureTrack = null;
+        RouteMonitorService.Reset(); OptionalSignalTelemetry.Reset();
     }
 
     private static bool HasTimingCalls(string? report, HudTimingStage stage, int calls)

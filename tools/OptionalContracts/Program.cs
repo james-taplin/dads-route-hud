@@ -12,6 +12,7 @@ var contracts = new Contract[]
     new("../DerailValley_Data/Managed/Assembly-CSharp.dll", "TrainCar", "property", "Bogies"),
     new("../DerailValley_Data/Managed/Assembly-CSharp.dll", "TrainCar", "property", "InterCouplerDistance"),
     new("../DerailValley_Data/Managed/Assembly-CSharp.dll", "TrainCar", "method", "GetForwardSpeed", 0, false),
+    new("../DerailValley_Data/Managed/DV.OriginShiftInfo.dll", "DV.OriginShift.OriginShift", "field", "parentContainer", IsStatic: true),
     new("DVSignals/Signals.Game.dll", "Signals.Game.SignalManager", "property", "AllControllers"),
     new("DVSignals/Signals.Game.dll", "Signals.Game.SignalManager", "base", "DV.Utils.SingletonBehaviour`1<Signals.Game.SignalManager>"),
     new("DVSignals/Signals.Game.dll", "Signals.Game.Controllers.BasicSignalController", "property", "PlacementInfo"),

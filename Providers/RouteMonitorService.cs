@@ -255,7 +255,8 @@ namespace DvMod.HeadsUpDisplay
             var source = walk!;
             var partial = new RouteSnapshot<RailTrack>(revision, source.RequestedDistance, source.ReachedDistance,
                 source.Termination, IncludeStartBoundary(source.Intervals), collectingEvents, collectingProfile, true,
-                collection == null ? "Walking native selected route; event collection pending"
+                !NativeRouteSignIndex.DiscoveryComplete ? "Discovering native sign roots incrementally; observations partial"
+                    : collection == null ? "Walking native selected route; event collection pending"
                     : "Collecting every native sign part and track item; observations partial",
                 "Optional signals pending route capture", collectingProblems);
             if (TryOffset(partial.Intervals, track, span, forward, captureOffset, out var offset))
@@ -579,6 +580,11 @@ namespace DvMod.HeadsUpDisplay
             }
             var collecting = walk != null || (!OptionalSignalTelemetry.IsComplete && OptionalSignalTelemetry.IsAvailable);
             var eventCoverage = source.EventCoverage;
+            if (!NativeRouteSignIndex.DiscoveryComplete)
+            {
+                eventCoverage += "; native scene discovery pending; observations partial";
+                collecting = true;
+            }
             if (NativeRouteSignIndex.SnapshotRevision != signRevision)
             {
                 nextRefresh = 0;

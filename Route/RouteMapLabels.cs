@@ -19,14 +19,19 @@ namespace DvMod.HeadsUpDisplay
     {
         public static List<RouteMapLabel> Arrange(IReadOnlyList<RouteEvent> events, double start, double end,
             float width, int lanes, Func<RouteEvent, float> measure)
+            => ArrangeBoards(events, start, end, width, lanes, measure,
+                item => item.Kind == RouteEventKind.Speed && item.SpeedLimitKph.HasValue && item.AppliesToTravel);
+
+        public static List<RouteMapLabel> ArrangeBoards(IReadOnlyList<RouteEvent> events, double start, double end,
+            float width, int lanes, Func<RouteEvent, float> measure, Func<RouteEvent, bool> visible, bool includeEnd = true)
         {
             var result = new List<RouteMapLabel>();
             if (lanes <= 0 || width <= 0 || end <= start) return result;
             var last = new RouteMapLabel?[lanes];
             foreach (var item in events)
             {
-                if (item.Kind != RouteEventKind.Speed || !item.SpeedLimitKph.HasValue || !item.AppliesToTravel
-                    || item.Distance < start || item.Distance > end) continue;
+                if (!visible(item) || item.Distance < start || item.Distance > end
+                    || !includeEnd && item.Distance == end) continue;
                 var size = Math.Max(1, Math.Min(width, measure(item)));
                 var x = Math.Max(0, Math.Min(width - size, (float)RouteGraphScale.Fraction(item.Distance, start, end) * width - size / 2));
                 var lane = 0;

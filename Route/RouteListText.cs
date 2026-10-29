@@ -33,10 +33,29 @@ namespace DvMod.HeadsUpDisplay
             return text;
         }
 
+        public static string Description(RouteEvent item, double? speedKph)
+        {
+            if (item.Kind != RouteEventKind.Speed || !item.SpeedLimitKph.HasValue || !item.AppliesToTravel)
+                return Description(item);
+            // Preserve the exact measured glyphs; only colour tags change with speed.
+            var text = Plain(Prefix(item.Label, "Speed limit"));
+            var primary = RouteSpeed.Number(item.SpeedLimitKph.Value);
+            var secondary = item.AlternateSpeedLimitKph.HasValue ? "/" + RouteSpeed.Number(item.AlternateSpeedLimitKph.Value) : "";
+            var reading = primary + secondary;
+            var at = text.IndexOf(reading, StringComparison.Ordinal);
+            if (at < 0) return Description(item);
+            var coloured = "<color=" + RouteSpeed.ColorHex(RouteSpeed.Compare(speedKph, item.SpeedLimitKph)) + ">" + primary + "</color>";
+            if (secondary.Length > 0)
+                coloured += "/<color=" + RouteSpeed.ColorHex(RouteSpeed.Compare(speedKph, item.AlternateSpeedLimitKph))
+                    + ">" + secondary.Substring(1) + "</color>";
+            return "<b>" + text.Substring(0, at) + coloured + text.Substring(at + reading.Length) + "</b>";
+        }
+
         /// <summary>Moving distances and inspector-only provenance do not change a wrapped description.</summary>
         public static bool SameDescription(RouteEvent first, RouteEvent second) => first.Kind == second.Kind
             && first.Label == second.Label && first.Marker == second.Marker
             && first.AppliesToTravel == second.AppliesToTravel
+            && first.SpeedLimitKph == second.SpeedLimitKph && first.AlternateSpeedLimitKph == second.AlternateSpeedLimitKph
             && (first.Kind != RouteEventKind.Signal || (first.Aspect == second.Aspect && first.ColorHex == second.ColorHex))
             && ((first.Kind != RouteEventKind.Signal && first.Kind != RouteEventKind.Track) || first.Fact == second.Fact);
 

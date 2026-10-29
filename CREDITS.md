@@ -1,17 +1,18 @@
-# Dad's Route HUD - credits
-
-Dad's Route HUD is an independent MIT-licensed fork for Derail Valley.
-
-- **James** - fork author, design, development direction and gameplay testing; Dad's Driving HUD and the combined Dad's Route HUD.
-- **Miles Spielberg (Zeibach / mspielberg)** - original Heads-up Display for Derail Valley and its MIT-licensed source: https://github.com/mspielberg/dv-hud. Original copyright: Copyright 2020 Miles Spielberg.
-- **Koteq (Git author: Kot)** - Build 99 compatibility changes used as this fork's source base: https://github.com/koteq/dv-hud.
-- **mspielberg** - QuantitiesNet, the MIT-licensed quantities/units library: https://github.com/mspielberg/QuantitiesNet. Copyright (c) 2021 mspielberg.
-- **OpenAI Codex** - coding and investigation assistance under James's direction.
-
-Thanks to the creators of Derail Valley, Unity Mod Manager and Harmony for the game and modding infrastructure. Optional interoperability is provided for separately installed DVSignals, AI Traffic and DoubleTrack; those projects and their authors retain their own rights. Their code and assets are not bundled here. These acknowledgements do not imply endorsement.
-
-Rinzler's HUD was a feature-comparison reference, not a source-code base or dependency. No Rinzler implementation is reused or bundled. Prior limited declaration/settings inspection means this project does not claim a formal clean-room process.
-
-## Licence notices to distribute
-
-Keep **LICENSE**, **QuantitiesNet.LICENSE** and **THIRD_PARTY_NOTICES.txt** with the mod. The two licence files contain the full original MIT grants and warranty disclaimers. This credits file supplements those notices; it does not replace them. Fork additions are distributed under the same MIT terms as LICENSE.
+**CREDITS AND LICENSE**\
+\
+**Miles Spielberg / Zeibach / mspielberg** / *original Heads-up Display for Derail Valley, its MIT-licensed implementation, and QuantitiesNet;*\
+**Koteq / Kot** / *Build 99 compatibility contributions used as this fork’s source base;*\
+**Altfuture** / *Derail Valley;*\
+**Unity Mod Manager and Harmony contributors** / *mod loading and patching infrastructure.*\
+\
+**AND:**\
+**James Taplin / JimTaplin** / *Dad’s Route HUD fork, design direction, feature development, integration and in-game testing;*\
+**Codex** / *coding assistance, native API investigation, performance diagnostics, regression checks and release tooling.*\
+\
+The original MIT licences, copyright notices and third-party notices are included.\
+Dad’s Route HUD and its fork additions are released under MIT. QuantitiesNet\
+retains its own MIT copyright and licence notice. Reuse the MIT-covered code\
+under those terms, keeping the supplied notices.\
+\
+Game, Unity, mod-loader and optional-mod assemblies are not bundled.\
+This is an independent fork; acknowledgements do not imply endorsement.

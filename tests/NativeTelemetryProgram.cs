@@ -32,6 +32,9 @@ internal static class NativeTelemetryProgram
         car.SimController!.simFlow = flow;
         Time.time = 100;
         NativeTelemetry.Update(car);
+        Check(NativeTelemetry.SpeedKph == 36, "Shared HUD speed converts the existing native sample to km/h");
+        for (var i = 0; i < 100; i++) { var ignored = NativeTelemetry.SpeedKph; }
+        Check(car.SpeedReads == 1, "Map and list colour reads do not perform additional native speed sampling");
         Check(NativeTelemetry.Acceleration(car) == null, "First sample has no fabricated acceleration");
         Check(Near(NativeTelemetry.PortValue(car, "throttle"), 0.25f), "Port values use the current native port");
         Check(Near(NativeTelemetry.PortValue(car, "duplicate"), 2), "Duplicate port IDs retain the final indexed port");
@@ -129,6 +132,14 @@ internal static class NativeTelemetryProgram
         NativeTelemetry.Update(new TrainCar { SimController = null });
         Check(NativeTelemetry.ControlValue(other, controls => controls.Selected) == null, "An uninitialized car is safe");
         Check(NativeTelemetry.Finite(null) == null && NativeTelemetry.Finite(float.NegativeInfinity) == null && NativeTelemetry.Finite(0) == 0, "Finite filtering preserves legitimate zero and rejects missing/nonfinite values");
+        NativeTelemetry.Update(new TrainCar { Speed = -10, SimController = null });
+        Check(NativeTelemetry.SpeedKph == 36, "Reverse motion uses absolute speed for list overspeed colours without requiring a graph");
+        NativeTelemetry.Update(new TrainCar { Speed = float.NaN, SimController = null });
+        Check(NativeTelemetry.SpeedKph == null, "Nonfinite speed cannot create a comparison colour");
+        NativeTelemetry.Update(null);
+        Check(NativeTelemetry.SpeedKph == null, "No car clears the shared speed comparison");
+        NativeTelemetry.Update(new TrainCar { Speed = 0, SimController = null });
+        Check(NativeTelemetry.SpeedKph == 0, "A stationary car remains a known zero for green speed comparisons");
         Console.WriteLine($"{assertions} production NativeTelemetry/Registry regression checks passed.");
         return 0;
     }
